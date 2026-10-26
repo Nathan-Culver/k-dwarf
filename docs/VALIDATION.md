@@ -26,3 +26,5 @@ The environment has WebGL disabled; visual verification uses the software 3D fal
 - Physical rally dice entered as 6,4,1,1; one die discarded, natural 6 explodes. Reopened the game in a new tab; it resumed the saved explosion batch with one previously recorded batch, then accepted 2 and cleared Suppression.
 
 GitHub Pages deployment succeeded and the live 0.1.0 alpha interface was opened. Live hotseat setup reached battle through recon, marker placement and deployment. A final UI check found edge labels under the persistent top control bar; label placement was adjusted to reserve control margins.
+
+The final label fix was verified on GitHub Pages: the first edge unit label moved below the HUD and opened its action drawer on selection. Live screenshot: [preview.jpg](preview.jpg). Source commit 83381c9 passed Pages build/deployment.

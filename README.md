@@ -24,6 +24,8 @@ GitHub Pages serves the root. Use the local build below for development.
 
 Question-mark buttons open contextual help. **Field Manual** explains the current action rules and links to the coverage ledger.
 
+![Live K-Dwarf tabletop](docs/preview.jpg)
+
 ## Development
 
 ```sh
