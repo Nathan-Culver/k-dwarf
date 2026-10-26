@@ -2,24 +2,40 @@
   {
     "difficulty": "easy",
     "quality": "irregular",
-    "steps": 41,
-    "actions": 25,
-    "winner": 0,
+    "steps": 38,
+    "actions": 17,
+    "winner": 1,
     "error": null
   },
   {
     "difficulty": "normal",
     "quality": "regular",
-    "steps": 74,
-    "actions": 44,
+    "steps": 76,
+    "actions": 47,
     "winner": 0,
     "error": null
   },
   {
     "difficulty": "hard",
     "quality": "veteran",
-    "steps": 64,
-    "actions": 40,
+    "steps": 49,
+    "actions": 27,
+    "winner": 0,
+    "error": null
+  },
+  {
+    "difficulty": "hard",
+    "quality": "elite",
+    "steps": 61,
+    "actions": 32,
+    "winner": 1,
+    "error": null
+  },
+  {
+    "difficulty": "hard",
+    "quality": "super",
+    "steps": 23,
+    "actions": 11,
     "winner": 0,
     "error": null
   }

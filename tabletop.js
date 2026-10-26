@@ -4,7 +4,7 @@ import {clipMeshToTable} from './meshclip.js';
 import * as T from 'three';
 import {SoftwareTabletopRenderer} from './software3d.js';
 import {W,H,B,TYPES} from './data.js';
-import {visibleUnits,unit,feature} from './engine.js';
+import {visibleUnits,contact as unit,feature} from './engine.js';
 import {center,mix,firePoint,smokePolygon} from './geometry.js';
 import {sightlinePreview,lastShotLines,eligibleFireTargets} from './sightlines.js';
 import {Painter,hash,miniatureGeometry,groundTexture,terrainMeshes,statusToken,smokeMesh} from './models3d.js';

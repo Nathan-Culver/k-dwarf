@@ -2,7 +2,7 @@
 
 Nathan Culver's science-fiction tabletop browser game, adapted from his K-Dwarf design document using the [Crossfire digital tabletop](https://github.com/Nathan-Culver/crossfire) foundation.
 
-**Version 0.1.0 alpha.** The core operation can reach a victory result. This is an unfinished implementation, with [explicit rule coverage and remaining work](docs/COVERAGE.md). It is not an exhaustive or certified reproduction of the draft.
+**Version 0.2.0 alpha.** The core operation can reach a victory result. This is an unfinished implementation, with [explicit rule coverage and remaining work](docs/COVERAGE.md). It is not an exhaustive or certified reproduction of the draft.
 
 ## Play
 
@@ -17,6 +17,10 @@ GitHub Pages serves the root. Use the local build below for development.
 5. Drag ready teams for movement and a route preview. Shift-click or touch **Multi** selects groups. Pending reactions, routs and special cards appear in **Orders**.
 
 **Dice:** Irregular d4, Regular d6, Veteran d8, Elite d10, Super d12. Three kept action dice; each 4+ succeeds. A retained maximum explodes recursively. Attack successes 0/1/2/3/4+ cause no effect/Pin/Suppression/Rout/Destruction. Destruction requires an explosion. Advantage cancels Disadvantage, then extra roots are discarded before explosions. Command dice and recon roll-offs use their own displayed procedures.
+
+**Dice table:** Open **Operations → 3D dice table / bags & presets** for free rolls. Game actions automatically prepare exact pools in the same 3D tray. Convex rigid-body dice, D2–D100, custom faces/colors, four boards, bags/import/export, held dice, hit-target and sum/high/low/drop/keep calculations, sound, device voice, generated ambience, and optional shake/tilt controls are available. Game results are committed before animation; visual interactions cannot reroll them. See [dice features and browser limits](docs/DICE-ROLLER.md).
+
+**Commands:** One quality die per deployed troop or commander; 4+ successes are assigned directly, maximums explode, failures disappear. Armed/ongoing dice block refills. Each faction board and optional subfaction is selectable during setup. New prices and authored identity traits are marked provisional. See [reviewable boards](docs/COMMAND-BOARDS.md).
 
 **Saves:** automatic local save, separate checkpoint, portable JSON export/import, saved manual-dice batches, and separate force/map files. Browser storage belongs to the device/browser; export a file to move it. Saves contain referee/private force information and are not encrypted.
 

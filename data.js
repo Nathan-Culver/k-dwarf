@@ -1,11 +1,11 @@
 import {CATALOG} from './catalog.js';
 export {CATALOG};
-export const VERSION='0.1.0',B=32,W=1200,H=1000;
+export const VERSION='0.2.0',B=32,W=1200,H=1000;
 export const QUALITIES={irregular:{name:'Irregular',die:4,points:1,fmr:2},regular:{name:'Regular',die:6,points:3,fmr:3},veteran:{name:'Veteran',die:8,points:5,fmr:4},elite:{name:'Elite',die:10,points:7,fmr:5},super:{name:'Super',die:12,points:9,fmr:5}};
 export const TYPES={'camouflage-marker':{name:'Camouflaged contact',dice:0},'recon-marker':{name:'Recon marker',dice:0},rifle:{name:'Infantry team',dice:3,squad:true},smg:{name:'Assault team',dice:3,squad:true},hmg:{name:'Support weapon',dice:3,squad:true},pc:{name:'Platoon commander',dice:0},cc:{name:'Company commander',dice:0},bc:{name:'Battalion commander',dice:0},fo:{name:'Forward observer',dice:3,squad:true},recon:{name:'Reconnaissance',dice:3,squad:true},medic:{name:'Combat medic',dice:3,squad:true},engineer:{name:'Combat engineer',dice:3,squad:true},hacker:{name:'Cyberwarfare',dice:3,squad:true},android:{name:'Combat android',dice:3,squad:true},vehicle:{name:'Combat vehicle',dice:3,squad:true},drone:{name:'Combat drone',dice:3,squad:true},heavy:{name:'Heavy weapon',dice:3,squad:true},indirect:{name:'Indirect battery',dice:3,squad:true},crew:{name:'Weapon crew',dice:3,squad:true}};
 export const NATIONS={athenian:{name:'The Athenian Order',command:'free'},expedition:{name:'Expeditionary force',command:'free'},dominion:{name:'Opposing force',command:'free'}};
 export const WEAPONS=Object.fromEntries(CATALOG.weapons.map(w=>[w.id,w]));
-export const ARMOR=Object.fromEntries(CATALOG.infantryArmor.map(a=>[a.id,a]));
+export const ARMOR=Object.fromEntries(CATALOG.infantryArmor.map(a=>[a.id,{...a,incomingDisadvantage:a.id==='heavy-armor'?1:a.incomingDisadvantage}]));
 export const PROGRAMS={ice:{name:'ICE',module:'standard'},tracer:{name:'Tracer',module:'standard'},possession:{name:'Possession',module:'standard'},isolation:{name:'Isolation',module:'hunter'},static:{name:'Static',module:'standard'},counterware:{name:'Counterware',module:'standard'},wipe:{name:'Wipe',module:'hunter'},assist:{name:'Assist',module:'support'},firewall:{name:'Firewall',module:'support'}};
 export const FEATS=['Command Control','Steelstorm','Firestorm','Terrifying','Inspiring Maneuvering','Inspire Fire','Inspire Courage','Inspire Charge','Inspire Competency','Inspire Heroism'];
 export const VARIANTS={};

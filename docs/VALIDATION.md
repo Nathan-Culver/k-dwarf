@@ -1,30 +1,36 @@
-# Validation — 0.1.0 alpha
+# Validation — v0.2.0 alpha
 
-## Automated checks
+## Automated verification
 
-`npm test`: 76 tests pass across five files:
-- 18 core polyhedral dice/combat/recon/morale tests.
-- 23 Orders specification tests.
-- 16 nested save/import validation tests.
-- 8 terrain/map tests.
-- 11 cross-system integration tests covering real shot-ray endpoints, camouflage/discovery, program prevalidation/Counterware/control, vehicle crews/passengers, succession, scoped retention, double skill pools, protection and hazards.
+`npm test`: **121 passing tests across nine files**. This includes core actions, Orders, nested save validation, terrain, integrated rule interactions, all supplied player rulings, narrow-gap geometry, dice-table calculations/meshes/convex rigid bodies, automatic action-pool metadata and AI progression.
 
-`npm run build`: passes. Native ESM runtime and bundled Three.js are copied to static output.
+`npm run build`: passes. The native game modules, Three.js tabletop and standalone dice-table bundle are packaged for static hosting. Cannon-es is bundled locally, with its MIT license retained.
 
-`node tests/kd-campaigns.mjs`: three seeded patrol battles reach winners without errors, with periodic save/load. Results in [PLAYTHROUGHS.json](PLAYTHROUGHS.json). These small deterministic matches are smoke tests, not an exhaustive AI/rules audit.
+`node tests/kd-campaigns.mjs`: five seeded patrol battles reach winners without errors, with periodic portable save/load:
 
-## Browser checks
+| Difficulty | Quality | Decision steps | Game actions | Winner |
+| --- | --- | ---: | ---: | --- |
+| Easy | Irregular D4 | 38 | 17 | Red |
+| Normal | Regular D6 | 76 | 47 | Blue |
+| Hard | Veteran D8 | 49 | 27 | Blue |
+| Hard | Elite D10 | 61 | 32 | Red |
+| Hard | Super D12 | 23 | 11 | Blue |
 
-Observed in the browser against the current local build:
-- 390×844 phone: no horizontal document overflow; visible map width 353 px.
-- 844×390 landscape Full Screen: map 844×390, no horizontal document overflow, controls in drawers.
-- Recon supremacy manual roll-off, marker locking, automatic legal markers/edge deployment, Begin Operation and manual Command Dice flow.
-- Force Forge adds platoon and armored independent unit and returns to setup with updated totals.
+Results are in [PLAYTHROUGHS.json](PLAYTHROUGHS.json). The elite test exposed an AI pass loop near protected terrain and a charge endpoint that did not account for smaller commander bases. AI close assault/reserve choices and footprint-aware charge contact were fixed and given regression tests. These are bounded seeded playthroughs, not proof that every possible army/map matchup completes.
 
-The environment has WebGL disabled; visual verification uses the software 3D fallback. Hardware WebGL and actual Android/iOS gesture/orientation behavior remain unverified. Native fullscreen/orientation-lock permission is browser-dependent.
+Geometry tests find open base-edge rays through gaps missed by all former corner/midpoint samples, and sub-millionth movement windows missed by101 fixed time samples. Whole-base exposure is evaluated across the route for fleeting-gap Disadvantage. Floating-point tolerance and explicit computation budgets remain documented in COVERAGE.md.
 
-- Physical rally dice entered as 6,4,1,1; one die discarded, natural 6 explodes. Reopened the game in a new tab; it resumed the saved explosion batch with one previously recorded batch, then accepted 2 and cleared Suppression.
+## Chrome UI checks
 
-GitHub Pages deployment succeeded and the live 0.1.0 alpha interface was opened. Live hotseat setup reached battle through recon, marker placement and deployment. A final UI check found edge labels under the persistent top control bar; label placement was adjusted to reserve control margins.
+- Phone390×844: no horizontal document overflow; map353px wide; game dice dialog374px wide with no dialog overflow.
+- Landscape844×390: no horizontal document or dice-dialog overflow; dialog828px wide. Full-screen battlefield controls were also checked at844×390.
+- Manual game rally automatically prepares4D6, three kept with1 ADV. Entering6,4,1,1 displays3 kept/1 discarded and2 successes, then requests the retained six’s1D6 explosion.
+- Opening the saved game in a new tab resumes that explosion, with the original batch already recorded. Entering2 completes the rally and clears Suppression, retaining initiative.
+- Mixed free dice, rigid-body roll completion, visible per-die results, target totals, individual command-die selection, ability arming and held-trait activation were exercised.
+- Explicit fixtures in tests/browser-qa.html navigate away before replacing the test save so pagehide autosave cannot overwrite the requested fixture.
 
-The final label fix was verified on GitHub Pages: the first edge unit label moved below the HUD and opened its action drawer on selection. Live screenshot: [preview.jpg](preview.jpg). Source commit 83381c9 passed Pages build/deployment.
+The cloud browser has WebGL disabled; the tabletop uses its software fallback and the dice tray renders physical 3D meshes in software. Actual Android Chrome touch hardware, motion sensors, vibration, voice/audio output and native fullscreen/orientation permission behavior remain unverified. JSON import/export and malformed-save handling have programmatic coverage; the cloud browser file chooser stalled, so a new UI file-picker round-trip is not claimed.
+
+## Scope
+
+See [COVERAGE.md](COVERAGE.md), [DICE-ROLLER.md](DICE-ROLLER.md) and [PLAYER-RULINGS.md](PLAYER-RULINGS.md). The clarified rules and dice update do not complete every remaining K-Dwarf draft system. Individual command prices and authored faction/subfaction traits remain provisional for review.

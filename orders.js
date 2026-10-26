@@ -55,7 +55,7 @@ export function commandOrderError(s,{side,id,target,cardIds},helpers={}){
  id=canonicalOrderId(id);const o=byId.get(id);
  if(!o)return'Unknown Command Board Order.';
  if(![0,1].includes(side))return'Choose a command side.';
- if(s.options?.board==='athenian'&&!o.athenian)return'This Order is not on The Athenian Order board.';
+
  const w=s.orderWindow,action=w?.action,kind=commandActionKind(action),expected=actionById[id];
  if(expected&&kind&&kind!==expected)return'This Order does not apply to the declared action.';
  if(['take-cover','drive','bad-cover'].includes(id)&&kind&&kind!=='shoot')return'Terrain protection Orders apply to incoming shooting.';
@@ -151,7 +151,7 @@ export function actionCommandBonus(s,u,kind,options={}){
 // when that target has no cover penalty. Take Cover/Drive are defensive Orders.
 export function commandDefenseBonus(s,target,{kind='shoot',cover=0,scope=s.activeOrderScope??s.actionContext?.orderScope??null}={}){
  if(commandActionKind(kind)!=='shoot')return{dis:0,coverReduction:0,effects:[]};
- const effects=(s.effects||[]).filter(e=>effectLive(s,e)&&inScope(e,scope)&&e.role==='defender'&&e.target===target.id&&(!e.action||commandActionKind(e.action)==='shoot'));
+ const effects=(s.effects||[]).filter(e=>effectLive(s,e)&&(!e.requiresTerrain||geometryFeature(s,target))&&inScope(e,scope)&&e.role==='defender'&&e.target===target.id&&(!e.action||commandActionKind(e.action)==='shoot'));
  const dis=effects.reduce((n,e)=>n+(e.defenseDisadvantage||0),0),coverReduction=Math.min(Math.max(0,cover)+dis,effects.reduce((n,e)=>n+(e.coverReduction||0),0));
  return{dis,coverReduction,effects};
 }
@@ -162,7 +162,7 @@ export function commandDefenseBonus(s,target,{kind='shoot',cover=0,scope=s.activ
 export function consumeCommandAction(s,{kind,actors=[],targets=[],scope=s.activeOrderScope??s.actionContext?.orderScope??null}={}){
  kind=commandActionKind(kind);const actorIds=normalizeIds(actors),targetIds=normalizeIds(targets),used=[];
  for(const e of s.effects||[]){
-  if(!effectLive(s,e)||!inScope(e,scope)||e.retain||e.action&&commandActionKind(e.action)!==kind)continue;
+  if(!effectLive(s,e)||!inScope(e,scope)||e.retain||e.ongoing||e.action&&commandActionKind(e.action)!==kind)continue;
   if(e.role!=='defender'&&!Number.isFinite(e.adv)&&!Number.isFinite(e.characteristic)&&!e.double)continue;
   const match=e.role==='defender'?targetIds.includes(e.target):actorIds.includes(e.target)||e.all&&(s.units||[]).some(u=>actorIds.includes(u.id)&&u.side===e.side);
   if(match){e.used=true;used.push(e);}

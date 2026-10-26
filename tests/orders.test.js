@@ -29,7 +29,7 @@ test('activation checks declared actors, friendly/enemy sides, unit classes and 
  assert.match(commandOrderError(s,{side:0,id:'fire',target:'blue-v'}),/Infantry/);
  assert.match(commandOrderError(s,{side:0,id:'fire',target:'blue-other'}),/performing/);
  assert.match(commandOrderError(s,{side:0,id:'regroup',target:'blue'}),/declared action/);
- s.options.board='athenian';assert.match(commandOrderError(s,{side:0,id:'hell-s-fire',target:'blue-v'}),/not on/);
+ s.options.board='athenian';assert.match(commandOrderError(s,{side:0,id:'hell-s-fire',target:'blue-v'}),/performing/);
  s.options.board='catalog';s.orderWindow.action.ids=['blue-v'];assert.equal(commandOrderError(s,{side:0,id:'hell-s-fire',target:'blue-v'}),null);
 });
 

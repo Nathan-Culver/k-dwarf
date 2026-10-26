@@ -1,7 +1,7 @@
 import {boardOf,deploymentZone} from './table.js';
 import {installUnitHold} from './hold.js';
 import {B,W,H,TYPES} from './data.js';
-import {feature,visibleUnits,unit} from './engine.js';
+import {feature,visibleUnits,contact as unit} from './engine.js';
 import {center,mix,firePoint,smokePolygon} from './geometry.js';
 import {sightlinePreview,lastShotLines,eligibleFireTargets} from './sightlines.js';
 export const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
