@@ -1,0 +1,26 @@
+[
+  {
+    "difficulty": "easy",
+    "quality": "irregular",
+    "steps": 41,
+    "actions": 25,
+    "winner": 0,
+    "error": null
+  },
+  {
+    "difficulty": "normal",
+    "quality": "regular",
+    "steps": 74,
+    "actions": 44,
+    "winner": 0,
+    "error": null
+  },
+  {
+    "difficulty": "hard",
+    "quality": "veteran",
+    "steps": 64,
+    "actions": 40,
+    "winner": 0,
+    "error": null
+  }
+]
