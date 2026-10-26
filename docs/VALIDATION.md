@@ -24,3 +24,5 @@ Observed in the browser against the current local build:
 The environment has WebGL disabled; visual verification uses the software 3D fallback. Hardware WebGL and actual Android/iOS gesture/orientation behavior remain unverified. Native fullscreen/orientation-lock permission is browser-dependent.
 
 - Physical rally dice entered as 6,4,1,1; one die discarded, natural 6 explodes. Reopened the game in a new tab; it resumed the saved explosion batch with one previously recorded batch, then accepted 2 and cleared Suppression.
+
+GitHub Pages deployment succeeded and the live 0.1.0 alpha interface was opened. Live hotseat setup reached battle through recon, marker placement and deployment. A final UI check found edge labels under the persistent top control bar; label placement was adjusted to reserve control margins.

@@ -6,7 +6,9 @@ Nathan Culver's science-fiction tabletop browser game, adapted from his K-Dwarf 
 
 ## Play
 
-GitHub Pages is intended to serve this repository's root. Until hosting is enabled, run the local build below.
+**Play:** https://nathan-culver.github.io/k-dwarf/
+
+GitHub Pages serves the root. Use the local build below for development.
 
 1. Open **Operations → New operation**. Choose solo Easy/Normal/Hard or same-device hotseat.
 2. Use **Force Forge** to build both forces and **Battlefield fabrication** to draw terrain, generate a map, or load one of ten saved maps.
