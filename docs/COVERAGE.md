@@ -1,4 +1,4 @@
-# K-Dwarf rule coverage — v0.2.0 alpha
+# K-Dwarf rule coverage — v0.3.0 alpha
 
 This is a development build. “Implemented” below identifies working draft code; it does not establish that every exception, list, tactic, asset or rulebook interaction has been validated. The game can reach completion through the core systems, while the full source rules remain unfinished.
 
@@ -8,8 +8,10 @@ This is a development build. “Implemented” below identifies working draft co
 | --- | --- |
 | Action dice | Five quality dice d4/d6/d8/d10/d12; three kept roots; fixed4+; canceling ADV/DIS; discard extras before recursive natural-maximum explosions; manual, physical entry or auto rolls; saved immutable batches; automatic game-pool setup in a customizable 3D rigid-body dice table, free D2–D100, bags, custom faces, audio/voice, optional shake/tilt |
 | Combat outcomes | No effect, Pin, Suppression, Rout, Destruction at 0/1/2/3/4+; an explosion is necessary for Destruction; repeated Suppression does not kill |
-| Initiative | Automatic qualifying failure/pass; shooting reactions and simultaneous pools; tie favors reactive side; context-scoped retention effects |
+| Initiative | Mandatory 0–1 Rally/Skill pass, overriding retention; automatic qualifying failure/pass; shooting reactions and simultaneous pools; tie favors reactive side; context-scoped retention effects |
 | Movement | Straight routes, first new terrain stopping, ready/prone requirements, group formation/LOS, drag routes, several reactions along a route, each unit once per moving unit, withdrawal protected only inside initial feature |
+| Firing indicators | Animated per-firer source/target pairs for standard, recon, group, Command/crossfire, reactive and indirect fire; persist until either unit acts; hide without deleting; portable save validation |
+| Undo/redo | Reversible bounded decision patches; up to 40 entries / 500000-character budget; restores accepted dice, seed, casualties, command state and markers; AI paused on restoration; history survives save/import |
 | Shooting | Single/group/PC Command Fire; cover/prone/arcs/proximity penalties; weapon/armor modifiers and facings; HE/penetrating/incendiary profiles; mounted weapon pools at a common target; historical actual LOS rays |
 | LOS | 2D base-edge rays, no unit blocking; terrain/smoke blocks; structures use center as specified. Continuous critical-event search; numerical limits remain below |
 | Rally/rout | Single/coordinated/command rally; commander/program modifiers; morale costs; compulsory rearward rout and rally; reserve handling; surrender while routing; Android/Drone cannot rout |
@@ -54,3 +56,7 @@ These items must not be described as fully available:
 See [validation](VALIDATION.md). The remaining list is a work ledger, not a promise that unlisted interactions have exhaustive certification.
 
 See [player rulings](PLAYER-RULINGS.md), [provisional command boards](COMMAND-BOARDS.md), and [dice table](DICE-ROLLER.md). This update resolves the supplied clarification rounds; the remaining source systems above are still unfinished.
+
+## Source-only rules review in version 0.3
+
+[Implemented rules](IMPLEMENTED-RULES.md) and its [Word edition](K-Dwarf-Implemented-Rules.docx) were reconstructed from executable code and runtime data only, without PDF or design-document consultation. Its review section records newly observed restrictions, costing gaps, weapon/armor application issues, program reach, and deployment edge assumptions. It is authoritative about observed behavior for this review, rather than a claim of exhaustive intended-rule coverage. Mandatory low-roll Rally/Skill passes can supersede older retention abilities; this conflict is disclosed for review.

@@ -1,3 +1,4 @@
+import {beginUnitAction,recordFireEvent} from './fire-events.js';
 import {commandState,commandCount,rollCommandBowl,discardCommandDie,closeCommandDiscard} from './command.js';
 import {COMMAND_ABILITIES,getCommandAbility,getBoardAbilities,getCommandBoard} from './command-board.js';
 import { commandOrderError, resolveCommandOrder, actionCommandBonus, commandDefenseBonus, consumeCommandAction, consumeRetainCommandEffect, expireCommandScope } from "./orders.js";
@@ -24,7 +25,7 @@ const shuffle = (s, a) => {
   return a;
 };
 function newGame(options = {}) {
-  const scenario = SCENARIOS[options.scenario] ? options.scenario : "crossroads", armies = (options.armies || [armyTemplate("athenian"), armyTemplate("dominion")]).map((a) => structuredClone(validateArmy(a))), s = { format: "kdwarf-operations", version: VERSION, scenario, options: { mode: "solo", difficulty: "normal", autoRoll: false, board: "athenian", ...options, armies }, seed: (options.seed ?? Date.now()) >>> 0, active: 0, initiative: 0, actions: 0, phase: "recon", deployment: false, winner: null, units: armies.flatMap((a, i) => buildArmyUnits(a, i)), terrain: [], smoke: [], static: [], repeaters: [], hazards: [], decoys: [], pending: null, firefight: null, programPending: null, combat: null, smokeChoice: null, pendingDice: null, lastRoll: null, lastFire: null, lastMoves: [], knownFeatures: [], log: [], morale: [{ cards: [], specials: [], fmr: 0, air: [] }, { cards: [], specials: [], fmr: 0, air: [] }], events: [], commands: [commandState(), commandState()], orderStack: [], orderWindow: null, effects: [], objectives: [], recon: { markers: [], deployment: [], supremacy: null, bids: [0, 0], turn: 0, passes: 0 }, history: [] };
+  const scenario = SCENARIOS[options.scenario] ? options.scenario : "crossroads", armies = (options.armies || [armyTemplate("athenian"), armyTemplate("dominion")]).map((a) => structuredClone(validateArmy(a))), s = { format: "kdwarf-operations", version: VERSION, scenario, options: { mode: "solo", difficulty: "normal", autoRoll: false, board: "athenian", ...options, armies }, seed: (options.seed ?? Date.now()) >>> 0, active: 0, initiative: 0, actions: 0, phase: "recon", deployment: false, winner: null, units: armies.flatMap((a, i) => buildArmyUnits(a, i)), terrain: [], smoke: [], static: [], repeaters: [], hazards: [], decoys: [], pending: null, firefight: null, programPending: null, combat: null, smokeChoice: null, pendingDice: null, lastRoll: null, lastFire: null, fireEvents:[],fireEventSerial:0,lastMoves: [], knownFeatures: [], log: [], morale: [{ cards: [], specials: [], fmr: 0, air: [] }, { cards: [], specials: [], fmr: 0, air: [] }], events: [], commands: [commandState(), commandState()], orderStack: [], orderWindow: null, effects: [], objectives: [], recon: { markers: [], deployment: [], supremacy: null, bids: [0, 0], turn: 0, passes: 0 }, history: [] };
   const map = options.battlefield ? validateBattlefield(structuredClone(options.battlefield)) : generateBattlefield({ seed: s.seed, style: scenario === "woods" ? "woodland" : "mixed", board: { shape: "square", width: 1300, height: 1300 }, name: SCENARIOS[scenario].name });
   s.options.battlefield = structuredClone(map);
   s.terrain = structuredClone(map.terrain).map((t) => ({ ...t, cover: t.cover ?? (TERRAIN_RULES[t.type]?.protection === "depression" ? 0 : 1) }));
@@ -92,9 +93,9 @@ function expire(s) {
   }
   s.effects = s.effects.filter((e) => !e.expired && !e.used);
 }
-function shift(s, why = "Initiative passes") {
+function shift(s, why = "Initiative passes", {mandatory=false}={}) {
   if (s.winner !== null) return;
-  const protect = consumeRetainCommandEffect(s, { side: s.active, kind: s.actionContext?.kind, ids: s.actionContext?.ids, scope: s.activeOrderScope });
+  const protect = !mandatory && consumeRetainCommandEffect(s, { side: s.active, kind: s.actionContext?.kind, ids: s.actionContext?.ids, scope: s.activeOrderScope });
   if (protect) {
     protect.used = true;
     log(s, "Command effect retains initiative: " + why);
@@ -307,6 +308,7 @@ function beginMove(s, ids, to, options = {}) {
     if (units.some((u) => vehicle(u) || ["heavy", "indirect", "hmg"].includes(u.type))) throw Error("Only infantry may initiate melee.");
     if (units.some(commander) && !units.some((u) => !commander(u))) throw Error("Commanders need assisting subordinate infantry to charge.");
   }
+  beginUnitAction(s,ids);
   s.actions++;
   s.pending = { side: s.active, moves: plan.moves, index: 0, kind: options.kind || "move", target: options.target || null, reacted: false, reactors:[],progress:0, shift: false };
   advanceMovement(s);
@@ -397,6 +399,7 @@ function hug(s, id) {
   const u = unit(s, id);
   if (!u || u.side !== s.active || vehicle(u) || ["suppressed", "routed"].includes(u.status) || u.prone) throw Error("Choose eligible stationary infantry.");
   if (feature(s, u)?.cover) throw Error("This terrain already gives cover.");
+  beginUnitAction(s,[u.id]);
   reveal(s, u);
   u.prone = true;
   s.actions++;
@@ -565,6 +568,7 @@ function applyHits(s, t, hits, { moving = false, terrifying = false } = {}) {
   if (n >= 4) {
     const medic = living(s).find((u) => u.side === t.side && u.id !== t.id && u.type === "medic" && u.status !== "suppressed" && edgeDistance(u, t) < 1);
     if (medic && !vehicle(t) && t.type !== "android") {
+      beginUnitAction(s,[medic.id]);
       const save = pool(s, medic, { adv: 1, label: "Medic emergency recovery" });
       if (save.successes) {
         routeUnit(s, t);
@@ -623,6 +627,7 @@ function resolveRout(s, id) {
     s.routQueue = s.routQueue.filter((v) => v !== id);
     return;
   }
+  beginUnitAction(s,[u.id]);
   const behind = s.terrain.filter((t) => u.side === 0 ? center(t).x < u.x : center(t).x > u.x).sort((a, b) => dist(u, center(a)) - dist(u, center(b))), to = behind.map(center).find((p) => tableContains(s, p, 16) && movementTerrain(s, u, p).ok) || { x: u.side ? boardOf(s).width - 24 : 24, y: u.y };
   s.routQueue = s.routQueue.filter((v) => v !== id);
   s.pending = { side: u.side, moves: [{ id: u.id, from: { x: u.x, y: u.y, facing: u.facing }, to: { ...to, facing: u.facing } }], index: 0, kind: "rout", routId: id, reacted: false, shift: false };
@@ -638,6 +643,7 @@ function completeRout(s, u) {
     drawMorale(s, u.side, "Failed compulsory rally");
   }
   log(s, `${u.id} ${u.offTable ? "returns to reserves; rally before redeployment" : "halts in cover, still Suppressed"}.`);
+  if(r.successes<2&&s.active===u.side)shift(s,"Compulsory rally scored fewer than two successes",{mandatory:true});
 }
 function shots(s, fs, t, opts = {}) {
   return fs.flatMap((f) => {
@@ -647,20 +653,21 @@ function shots(s, fs, t, opts = {}) {
       const profile = firingProfile(s, f, t, { ...opts, weapon });
       if (!profile.count) return [];
       const result = pool(s, f, { ...profile, label: opts.melee ? "Melee" : opts.recon ? "Recon by fire" : opts.indirect ? "Indirect fire" : opts.reactive ? "Reactive fire" : "Shooting" }), w = profile.weapon, promote = opts.fireType === "incendiary" ? w.incendiaryCategoryPromotion : w.categoryPromotion, hits = Math.min(result.explosions.length ? 4 : 3, result.successes + (promote && result.successes <= Object.keys(promote).length - 1 ? 1 : 0));
-      return { f, t, result, hits, from: sight(s, f, t).from || firePoint(s, f), to: sight(s, f, t).to || firePoint(s, t), terrifying: !!promote };
+      return { f, t, result, hits, fireMode:opts.fireMode||(opts.indirect?"indirect":opts.reactive?"reactive":"single"), from: sight(s, f, t).from || firePoint(s, f), to: sight(s, f, t).to || firePoint(s, t), terrifying: !!promote };
     });
   });
 }
 function applyShots(s, all, { reactive = false, moving = false, indirect = false } = {}) {
   let best = 0;
   s.lastFire = { action: s.actions, initiative: s.initiative, reactive, shots: [] };
-  for (const { f, t, result, hits, from, to, terrifying } of all) {
+  for (const { f, t, result, hits, from, to, terrifying,fireMode } of all) {
     reveal(s, f);
     t.profileKnown = true;
     const outcome = t.dead || t.surrendered ? "target already removed" : applyHits(s, t, hits, { moving, terrifying: false });
     for (const passenger of (all[0]?.result.label==="Melee"?[]:s.units.filter((v) => v.transportId === t.id && !v.dead && !v.surrendered))) applyHits(s, passenger, hits, { moving });
     if (reactive && hits < 2) f.noFire = true;
     best = Math.max(best, hits);
+    if(result.label!=="Melee")recordFireEvent(s,{firerId:f.id,targetId:t.id,side:f.side,from,to,result:outcome,mode:fireMode||(indirect?'indirect':'single')});
     s.lastFire.shots.push({ firerId: f.id, targetId: t.id, side: f.side, from, to, dice: result.kept, result: outcome, concealed: false, pool: result });
     log(s, `${f.id} → ${t.id}: ${result.successes} successes · ${outcome}.`, "fire", result.kept);
     if (terrifying && !t.terrified) {
@@ -679,6 +686,7 @@ function directFire(s, ids, target, mode = "single", options = {}) {
   const fs = fireSet(s, ids, target, mode);
   if (fs.error) throw Error(fs.error);
   if (fs.firers.some((f) => f.side !== s.active)) throw Error("Use active-side firers.");
+  beginUnitAction(s,ids);
   for (const f of fs.firers) reveal(s, f);
   s.firefight = { side: s.active, ids: [...ids], target, mode, options, round: 0 };
   log(s, "Shooting declared. Opponent may react with fire, movement, rally, skill, or pass.");
@@ -698,12 +706,13 @@ function resolveFirefight(s, { ids = [], mode = "single", decline = false } = {}
     ds = def.firers;
     if (ds.some((u) => u.side === p.side)) throw Error("Choose reactive enemy firers.");
   }
+  beginUnitAction(s,ds.map(u=>u.id));
   s.actions++;
   let aBest = 0, dBest = 0, round = 0;
   do {
     if (++round > 150) throw Error("Firefight failed to resolve.");
     const legal = as.filter((f) => !fireEligibility(s, f, target));
-    const a = shots(s, legal, target, p.options), d = ds.length ? shots(s, ds, as[0], { reactive: true }) : [];
+    const a = shots(s, legal, target, {...p.options,fireMode:p.mode}), d = ds.length ? shots(s, ds, as[0], { reactive: true,fireMode:mode==="single"?"reactive":mode }) : [];
     aBest = applyShots(s, a);
     dBest = d.length ? applyShots(s, d, { reactive: true }) : 0;
     if (!ds.length || aBest >= 2 || dBest >= 2) break;
@@ -719,7 +728,8 @@ function react(s, ids, t = 0.5, mode = "single") {
   Object.assign(u,at);
   const legal=fireSet(s,ids,u.id,mode,true);
   if(legal.error){Object.assign(u,before);throw Error(legal.error);}
-  const all=shots(s,legal.firers,u,{reactive:true}),best=applyShots(s,all,{reactive:true,moving:true});
+  beginUnitAction(s,ids);
+  const all=shots(s,legal.firers,u,{reactive:true,fireMode:mode==="single"?"reactive":mode}),best=applyShots(s,all,{reactive:true,moving:true});
   p.reactors??=[];p.reactors.push(...ids);p.progress=t;
   if(best>=2||u.surrendered||u.dead)p.shift=true;
   if(best>=1||u.surrendered||u.dead)finishMover(s,t);
@@ -733,6 +743,7 @@ function rally(s, id, { automatic = false, reactive = false } = {}) {
   const u = unit(s, id);
   if (!u || !["pinned", "suppressed", "routed"].includes(u.status) || !reactive && u.side !== s.active) throw Error("Choose an eligible pinned/suppressed stand.");
   if (["android", "drone"].includes(u.type) || u.breakdown) throw Error("Use engineer/hacker recovery for this unit.");
+  beginUnitAction(s,[u.id]);
   reveal(s, u);
   s.actions++;
   if (automatic) {
@@ -750,25 +761,30 @@ function rally(s, id, { automatic = false, reactive = false } = {}) {
   }
   consumeCommandAction(s, { kind: "rally", actors: [u], scope: s.activeOrderScope });
   log(s, `${u.id} rally: ${r.successes} successes · ${u.status}.`, "rally", r.kept);
-  if (!reactive && r.successes < 2) shift(s, "Rally scored fewer than two successes");
+  if (!reactive && r.successes < 2) shift(s, "Rally scored fewer than two successes",{mandatory:true});
   if (reactive && r.successes >= 2 && s.pending) s.pending.shift = true;
 }
 function recon(s, ids, featureId) {
   available(s);
   const terrain = s.terrain.find((t) => t.id === featureId);
   if (!terrain) throw Error("Select a terrain feature.");
-  let best = 0;
+  for(const id of ids){const u=unit(s,id);if(!canShoot(u)||u.side!==s.active||!sight(s,u,{...center(terrain),pointOnly:true}).clear)throw Error('Every firer needs LOS to the feature.');}
+  beginUnitAction(s,ids);
+  let best = 0;const fired=[];
   s.actions++;
   for (const id of ids) {
     const u = unit(s, id);
     if (!canShoot(u) || u.side !== s.active || !sight(s, u, { ...center(terrain), pointOnly: true }).clear) throw Error("Every firer needs LOS to the feature.");
     const target = { ...center(terrain), id: "terrain", side: 1 - u.side, type: "rifle", armor: "none", armorFaces: {}, markers: [], status: "ready" }, profile = firingProfile(s, u, target, { recon: true }), r = pool(s, u, { ...profile, label: "Recon by fire" });
+    fired.push({u,r});
     best = Math.max(best, r.successes);
     reveal(s, u);
   }
   const enemies = living(s).filter((u) => u.side !== s.active && feature(s, u)?.id === featureId);
   if (best >= 2) for (const u of enemies) reveal(s, u);
   if (best >= 2) s.decoys = s.decoys.filter((d) => feature(s, d)?.id !== featureId);
+  const known=enemies.filter(u=>!u.hidden&&!u.camouflaged);
+  for(const {u,r}of fired){const ray=sight(s,u,{...center(terrain),pointOnly:true});for(const t of (known.length?known:[null]))recordFireEvent(s,{firerId:u.id,targetId:t?.id||null,featureId,side:u.side,from:ray.from||firePoint(s,u),to:ray.to||center(terrain),result:`${r.successes} successes; recon reveals contacts, no damage`,mode:'recon'});}
   s.knownFeatures = [.../* @__PURE__ */ new Set([...s.knownFeatures, featureId])];
   if (best < (enemies.length ? 2 : 3)) shift(s, "Recon by fire failed");
 }
@@ -777,7 +793,8 @@ function smokeMission(s, id, p) {
   const u = unit(s, id);
   if (!u || !commander(u) && u.type !== "fo" && !WEAPONS[u.weapon]?.smoke || u.side !== s.active || u.status === "suppressed" || !sight(s, u, { ...p, pointOnly: true }).clear) throw Error("Choose a visible smoke point from an eligible unit.");
   if (living(s).some((v) => v.side === u.side && dist(v, p) < B / 2)) throw Error("Do not intentionally land smoke on friendly units.");
-  reveal(s, u);
+  beginUnitAction(s,[u.id]);
+  reveal(s,u);
   const r = pool(s, u, { adv: commander(u) || u.type === "fo" ? 1 : 0, label: "Smoke mission" }), n = r.successes, side = s.active;
   s.actions++;
   if (!n) {
@@ -858,7 +875,7 @@ function finishSkillAttempt(s,u,kind,result,sequence,options){
  sequence.completed++;sequence.best=Math.max(sequence.best,result.sequenceSuccesses??result.successes);
  if(sequence.completed<sequence.total&&u&&!u.dead&&!u.surrendered)return skill(s,u.id,kind,{...options,sequence});
  consumeCommandAction(s,{kind:'skill',actors:[u],scope:s.activeOrderScope});
- if(!options.reactive&&sequence.best<2&&s.active===sequence.side)shift(s,'Skill attempts scored fewer than two successes');
+ if(!options.reactive&&sequence.best<2&&s.active===sequence.side)shift(s,'Skill attempts scored fewer than two successes',{mandatory:true});
  if(options.reactive&&!sequence.best)u.noSkill=true;
  return result;
 }
@@ -871,9 +888,10 @@ function skillAttempt(s, id, kind, { target = null, to = null, featureId = null,
   if (kind === "heal" && (u.type !== "medic" || vehicle(t) || t.type === "android")) throw Error("Medic recovery applies to infantry and powered armor.");
   if (kind === "repair" && (!["engineer", "hacker"].includes(u.type) || u.type === "hacker" && !["android", "drone"].includes(t.type))) throw Error("Use an engineer, or hacker for androids/drones.");
   if(kind==='cancel-support'){
-    const before=t?.markers.length;if(!t)throw Error('Select the supported unit.');
-    t.markers=t.markers.filter(m=>!(m.caster===u.id&&['assist','firewall'].includes(m.kind)&&(extra?m.kind===extra:true)));
-    if(before===t.markers.length)throw Error('This hacker has no support marker on that unit.');
+    if(!t)throw Error('Select the supported unit.');
+    const remaining=t.markers.filter(m=>!(m.caster===u.id&&['assist','firewall'].includes(m.kind)&&(extra?m.kind===extra:true)));
+    if(remaining.length===t.markers.length)throw Error('This hacker has no support marker on that unit.');
+    beginUnitAction(s,[u.id]);t.markers=remaining;
     log(s,'Support program voluntarily cancelled.');return;
   }
   if (kind === "program") validateProgram(s, u, t, program, to, extra);
@@ -908,6 +926,7 @@ function skillAttempt(s, id, kind, { target = null, to = null, featureId = null,
   if (kind === "place-hazard" && (!to || dist(u, to) > B * 3 || !["wire", "barrier", "mine"].includes(extra || "wire"))) throw Error("Choose a wire, barrier or mine point within three bases of the engineer.");
   if (kind === "clear-hazard" && !s.hazards.some((h) => h.id === extra && dist(u, h) <= B * 2)) throw Error("Select a hazard adjacent to the engineer.");
   }
+  if(!sequence?.completed)beginUnitAction(s,[u.id]);
   const reasons = [], bonuses = actionBonus(s, u, "skill"), adv = (kind === "program" && t && programControl(s, u, t).control ? 1 : 0) + (kind === "program" && t && marked(t, "tracer") ? 1 : 0) + Math.max(0, bonuses.adv) + commandBonus(s, u) + (["recon", "fo", "medic", "engineer", "hacker"].includes(u.type) ? 1 : 0) + (marked(u, "assist") ? 1 : 0), dis = (kind === "program" && t && programControl(s, u, t).enemyRepeater ? 1 : 0) + (kind === "program" && t && marked(t, "firewall") ? 1 : 0) + (marked(u, "isolation") ? 1 : 0) + Math.max(0, -bonuses.adv);
   s.actions++;
   const result=pool(s,u,{adv,dis,modifier:bonuses.modifier,label:"Skill · "+kind+(sequence?.total>1?" · attempt "+(sequence.completed+1):"")});
@@ -986,6 +1005,7 @@ function skillAttempt(s, id, kind, { target = null, to = null, featureId = null,
       if (!gun || gun.side !== u.side || !WEAPONS[weapon || gun.weapon]?.indirect) throw Error("Choose an owned indirect-fire battery.");
       if (!t || !sight(s, u, t).clear) throw Error("The observer must see the target.");
       if (feature(s, t)?.type === "depression" && feature(s, u)?.type !== "hill") throw Error("Depression protects this target unless the observer is on a hill.");
+      beginUnitAction(s,[gun.id]);
       const stationary = gun.ranging?.target === t.id && gun.ranging.x === t.x && gun.ranging.y === t.y ? (gun.ranging.bonus || 0) + 1 : 0, profile = firingProfile(s, gun, t, { indirect: true, weapon: weapon || gun.weapon }), r = pool(s, gun, { ...profile, adv: profile.adv + stationary, label: "Indirect barrage" });
       applyShots(s, [{ f: gun, t, result: r, hits: Math.min(4, r.successes), from: u, to: t }], { indirect: true });
       gun.ranging = { target: t.id, x: t.x, y: t.y, bonus: stationary };
@@ -1218,6 +1238,7 @@ function reactiveAction(s, a) {
   if (a.kind === "move") {
     const u = unit(s, a.id), to = a.to, error = canMove(s, u, { ...u, ...to });
     if (!u || u.side !== side || error) throw Error(error || "Choose a reacting unit.");
+    beginUnitAction(s,[u.id]);
     Object.assign(u, to);
     u.hidden = false;
     s.actions++;
@@ -1243,6 +1264,7 @@ function coordinatedRally(s, ids, mode = "group") {
     const pc = living(s).find((c) => c.type === "pc" && c.side === s.active && c.platoon === us[0].platoon && c.status !== "suppressed");
     if (!pc || us.some((u) => !sight(s, pc, u).clear)) throw Error("Command rally requires its unsuppressed PC to see all participants.");
   }
+  beginUnitAction(s,ids);
   const rolls = us.map((u) => ({ u, r: pool(s, u, { adv: commandBonus(s, u) + (marked(u, "assist") ? 1 : 0) + Math.max(0, actionBonus(s, u, "rally").adv), dis: (marked(u, "isolation") ? 1 : 0) + Math.max(0, -actionBonus(s, u, "rally").adv), modifier: actionBonus(s, u, "rally").modifier, label: "Coordinated rally" }) }));
   s.actions++;
   for (const { u, r } of rolls) {
@@ -1252,7 +1274,7 @@ function coordinatedRally(s, ids, mode = "group") {
     log(s, `${u.id}: ${r.successes} rally successes → ${u.status}.`, "rally", r.kept);
   }
   consumeCommandAction(s, { kind: "rally", actors: us, scope: s.activeOrderScope });
-  if (Math.max(...rolls.map((v) => v.r.successes)) < 2) shift(s, "Coordinated rally scored fewer than two successes");
+  if (Math.max(...rolls.map((v) => v.r.successes)) < 2) shift(s, "Coordinated rally scored fewer than two successes",{mandatory:true});
 }
 function actionBonus(s, u, kind) {
   return actionCommandBonus(s, u, kind, { scope: s.activeOrderScope });
@@ -1265,6 +1287,7 @@ function finishProgram(s, counterId = null) {
   if (counterId) {
     const h = unit(s, counterId);
     if (!h || h.offTable || h.side !== side || h.type !== "hacker" || !["standard", "hunter"].includes(h.module) || ["suppressed", "routed"].includes(h.status) || h.noCounterware) throw Error("Choose a hacker with eligible Counterware.");
+    beginUnitAction(s,[h.id]);
     const r = pool(s, h, { adv: 1 + (u && programControl(s, h, u).control ? 1 : 0), label: "Counterware" });
     counter = r.successes;
     n = Math.max(0, n - counter);
@@ -1345,6 +1368,7 @@ function replaceCommanders(s) {
   if (s.commandLosses.length) replaceCommanders(s);
 }
 function activateFeat(s, u, extra) {
+  beginUnitAction(s,[u.id]);
   u.featUsed = true;
   s.actions++;
   const f = u.feat;

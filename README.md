@@ -2,7 +2,7 @@
 
 Nathan Culver's science-fiction tabletop browser game, adapted from his K-Dwarf design document using the [Crossfire digital tabletop](https://github.com/Nathan-Culver/crossfire) foundation.
 
-**Version 0.2.0 alpha.** The core operation can reach a victory result. This is an unfinished implementation, with [explicit rule coverage and remaining work](docs/COVERAGE.md). It is not an exhaustive or certified reproduction of the draft.
+**Version 0.3.0 alpha.** The core operation can reach a victory result. This is an unfinished implementation, with [explicit rule coverage and remaining work](docs/COVERAGE.md). It is not an exhaustive or certified reproduction of the draft.
 
 ## Play
 
@@ -21,6 +21,12 @@ GitHub Pages serves the root. Use the local build below for development.
 **Dice table:** Open **Operations → 3D dice table / bags & presets** for free rolls. Game actions automatically prepare exact pools in the same 3D tray. Convex rigid-body dice, D2–D100, custom faces/colors, four boards, bags/import/export, held dice, hit-target and sum/high/low/drop/keep calculations, sound, device voice, generated ambience, and optional shake/tilt controls are available. Game results are committed before animation; visual interactions cannot reroll them. See [dice features and browser limits](docs/DICE-ROLLER.md).
 
 **Commands:** One quality die per deployed troop or commander; 4+ successes are assigned directly, maximums explode, failures disappear. Armed/ongoing dice block refills. Each faction board and optional subfaction is selectable during setup. New prices and authored identity traits are marked provisional. See [reviewable boards](docs/COMMAND-BOARDS.md).
+
+**Firing indicators:** Standard, recon, group, Command/crossfire, reactive and indirect fire show animated directional shots with firer/target IDs. Each pair remains until either unit next acts. Other units and initiative changes do not erase it.
+
+**Undo / Redo:** Map, full-screen, Operations and game dice controls restore up to forty decisions within the storage budget. Exact accepted faces, casualties, commands, initiative and markers return together; the AI pauses after restoration. Ctrl/Cmd-Z, Shift-Z and Y shortcuts are supported. Saves retain history.
+
+**Rules for review:** [Searchable implemented game rules](https://nathan-culver.github.io/k-dwarf/rules.html), [Markdown](docs/IMPLEMENTED-RULES.md), and [editable Word manual](docs/K-Dwarf-Implemented-Rules.docx). These were reconstructed only from executable game behavior and runtime data, without consulting a PDF or external rulebook. Existing implementation discrepancies and provisional content are identified. A completed rolled Rally or Skill scoring zero or one automatically passes initiative, overriding retention effects.
 
 **Saves:** automatic local save, separate checkpoint, portable JSON export/import, saved manual-dice batches, and separate force/map files. Browser storage belongs to the device/browser; export a file to move it. Saves contain referee/private force information and are not encrypted.
 

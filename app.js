@@ -1,6 +1,8 @@
-import {mountDiceTray} from './dice-tray.bundle.js?v=0.2.0';
+import{GameHistory}from'./history.js';
+import{activeFireEvents,FIRE_MODE_NAMES}from'./fire-events.js';
+import {mountDiceTray} from './dice-tray.bundle.js?v=0.3.0';
 import {BOARD_LIST,getCommandBoard,getCommandAbility} from './command-board.js';
-import { mountTabletop } from "./tabletop.bundle.js?v=0.2.0";
+import { mountTabletop } from "./tabletop.bundle.js?v=0.3.0";
 import * as E from "./engine.js";
 import { VERSION, QUALITIES, TYPES, NATIONS, WEAPONS, ARMOR, PROGRAMS, FEATS, SCENARIOS, RULES_URL } from "./data.js";
 import { armyTemplate, armyTotals, unitValue, encodeArmy, decodeArmy } from "./army.js";
@@ -20,13 +22,14 @@ try {
   loadError=error.message;
 }
 game ||= E.newGame();
+let journal=new GameHistory(game,E.validateSave),historyReview=journal.canRedo;
 let commandSelection = [];
-let selected = [], target = null, mode = "select", tab = "orders", view = "tabletop", pan = false, orbit = false, multi = false, expanded = false, paused = false, camera = null, snapshot = null, toastTimer = null, aiTimer = null, diceRequest = null, context = null, fireMode = "single", fireType = "normal", reactionT = 0.5, mapDraft = null, mapEditor = null, forceSide = 0, forceDrafts = structuredClone(game.options.armies), chosenMap = game.options.battlefield, showShot = true, showZones = false;
+let selected = [], target = null, mode = "select", tab = "orders", view = "tabletop", pan = false, orbit = false, multi = false, expanded = false, paused = journal.canRedo, camera = null, snapshot = null, toastTimer = null, aiTimer = null, diceRequest = null, context = null, fireMode = "single", fireType = "normal", reactionT = 0.5, mapDraft = null, mapEditor = null, forceSide = 0, forceDrafts = structuredClone(game.options.armies), chosenMap = game.options.battlefield, showShot = true, showZones = false;
 try {
   view = localStorage.getItem("kdwarf-view") || "tabletop";
 } catch {
 }
-const human = (side) => game.options.mode === "hotseat" || side === 0, actor = () => game.orderWindow?.priority ?? (game.programPending ? 1 - game.programPending.side : null) ?? game.events[0]?.side ?? game.smokeChoice?.chooser ?? (game.pending ? 1 - game.pending.side : game.firefight ? 1 - game.firefight.side : game.phase === "recon" || game.phase === "deployment-markers" ? game.recon.turn : game.active), viewer = () => game.options.mode === "hotseat" ? actor() : 0, save = () => Store.save(game), get = (id) => E.unit(game, id) || game.decoys.find((d) => d.id === id), selectedUnits = () => selected.map(get).filter(Boolean), button = (text, attrs = "", kind = "") => `<button class="${kind}" ${attrs}>${text}</button>`, help = (key) => `<button class="help" data-help="${key}" aria-label="Help: ${key}">?</button>`, sideName = (side) => side ? "RED" : "BLUE", dieName = (u) => "D" + QUALITIES[u.quality].die;
+const human = (side) => game.options.mode === "hotseat" || side === 0, actor = () => game.orderWindow?.priority ?? (game.programPending ? 1 - game.programPending.side : null) ?? game.events[0]?.side ?? game.smokeChoice?.chooser ?? (game.pending ? 1 - game.pending.side : game.firefight ? 1 - game.firefight.side : game.phase === "recon" || game.phase === "deployment-markers" ? game.recon.turn : game.active), viewer = () => game.options.mode === "hotseat" ? actor() : 0, save = (label=null) => {journal?.record(game,label);refreshHistoryControls();return Store.save(game)}, get = (id) => E.unit(game, id) || game.decoys.find((d) => d.id === id), selectedUnits = () => selected.map(get).filter(Boolean), button = (text, attrs = "", kind = "") => `<button class="${kind}" ${attrs}>${text}</button>`, help = (key) => `<button class="help" data-help="${key}" aria-label="Help: ${key}">?</button>`, sideName = (side) => side ? "RED" : "BLUE", dieName = (u) => "D" + QUALITIES[u.quality].die;
 function toast(text) {
   q("#toast").textContent = text;
   q("#toast").classList.add("visible");
@@ -84,7 +87,7 @@ function diceAction(action, { orders = false } = {}) {
     }
     const r = beginDiceAction(game, action);
     game = r.game;
-    save();
+    save(r.done?null:"Declare "+action.type+(action.kind?" · "+action.kind:"")+(action.id?" · "+action.id:""));
     if (r.done) finishAction();
     else showDice(r.request);
   } catch (e) {
@@ -104,9 +107,10 @@ function finishAction() {
   render();
 }
 function showDice(r) {
+ r={...r,initiativeRule:/Rally|rally|Skill|Recovery/.test(r.label)};
  diceRequest=r;if(r.label.includes('roll-off'))r={...r,kind:'roll-off'};
- show('Dice table · '+sideName(r.side),'<div id="dice-room"></div>');dialog.classList.add('dice-room-dialog');
- diceTray=mountDiceTray(q('#dice-room'),{request:r,onRecord:values=>{game=recordDice(game,values);save();},onContinue:()=>{const next=advanceDiceAction(game);game=next.game;save();if(next.done)finishAction();else showDice(next.request);},onExport:()=>Store.download(game),onError:toast});
+ show('Dice table · '+sideName(r.side),'<div class="dice-history-controls">'+historyControls()+'</div><div id="dice-room"></div>');dialog.classList.add('dice-room-dialog');
+ diceTray=mountDiceTray(q('#dice-room'),{request:r,onRecord:values=>{game=recordDice(game,values);save("Record "+values.length+"D"+r.sides+" dice");},onContinue:()=>{const next=advanceDiceAction(game);game=next.game;save();if(next.done)finishAction();else showDice(next.request);},onExport:()=>Store.download(game),onError:toast});
 }
 function freeDiceTable(resolved=null){
  if(game.pendingDice){const r=advanceDiceAction(game);if(r.done){game=r.game;finishAction();}else showDice(r.request);return;}
@@ -146,11 +150,12 @@ function guidance() {
   return `${sideName(game.active)} initiative · select a team, choose an action, and exploit your successes.`;
 }
 function render() {
+  if(journal?.record(game))Store.save(game);
   snapshot = camera?.destroy() || snapshot;
   camera = null;
   document.body.classList.toggle("board-play", expanded);
   const own = game.morale[viewer()], burden = own.cards.reduce((n, c) => n + c.value, 0);
-  app.innerHTML = `<header class="kd-topbar"><a class="kd-wordmark" href="#" data-home><span class="kd-star">✦</span><div>K-DWARF<small>O P E R A T I O N S</small></div></a><div class="kd-status"><i></i>LOCAL COMMAND LINK<span>v${VERSION} ALPHA</span></div><nav>${button("FORCE FORGE", "data-forces")}${button("FIELD MANUAL", 'data-help="scope"')}${button("OPERATIONS", "data-operations")}</nav></header><main class="kd-shell"><section class="kd-brief"><div><p class="eyebrow">TACTICAL OPERATIONS / ${game.phase.replaceAll("-", " ").toUpperCase()}</p><h1>${SCENARIOS[game.scenario].name}</h1><p>Command the descendants of humanity beneath a long-lived star.</p><div class="kd-phase-strip"><span class="${game.phase === "recon" ? "active" : ""}">01 RECON</span><span class="${game.phase.includes("deployment") ? "active" : ""}">02 DEPLOY</span><span class="${game.phase === "battle" ? "active" : ""}">03 ENGAGE</span></div></div><div class="kd-telemetry"><div><small>INITIATIVE</small><strong class="${game.active ? "red" : "blue"}">${sideName(game.active)} <b>${game.initiative || "—"}</b></strong></div><div><small>YOUR FORCE MORALE</small><strong>${burden}<em> / ${own.fmr}</em></strong><div class="meter"><i style="width:${Math.min(100, 100 * burden / own.fmr)}%"></i></div></div><div><small>OBJECTIVES</small><strong>${game.objectives.filter((o) => o.owner === viewer()).length}<em> / ${game.objectives.length || "—"}</em></strong></div></div></section><section class="kd-directive"><span class="pulse"></span><b>${game.winner !== null ? "OPERATION COMPLETE" : "COMMAND GUIDANCE"}</b><p>${esc(guidance())}</p>${help(game.phase === "battle" ? "actions" : "recon")}</section><div class="kd-layout"><section class="map-panel panel ${expanded ? "expanded" : ""}"><div class="panel-head"><div><span class="eyebrow">${view === "tabletop" ? "HOLOGRAPHIC TABLETOP" : "TACTICAL FOOTPRINTS"}</span><h3>${esc(game.options.battlefield.name)}</h3></div><div class="map-tools">${button(view === "tabletop" ? "2D PLAN" : "3D TABLE", "data-view")}${button("FIT", 'data-camera="fit"')}${button("FULL SCREEN", 'data-camera="expand"')}</div></div><div class="map-viewport" tabindex="0" aria-label="K-Dwarf battlefield: tap to select; drag to move or pan"><div class="battle-stage">${view === "tactical" ? renderMap(displayGame(), mapState()) : ""}</div></div>${quickOrders()}<div class="map-footer"><span>4+ SUCCESS · MAXIMUM EXPLODES</span><span>D4 / D6 / D8 / D10 / D12</span></div>${expanded ? playHUD() : ""}${context ? contextHTML() : ""}</section>${!expanded ? `<aside class="kd-sidebar"><nav class="kd-desk-tabs">${tabs().map(([id, name]) => button(name, `data-tab="${id}"`, tab === id ? "active" : "")).join("")}</nav>${panel()}</aside>` : ""}</div><section class="kd-bottom"><div><span class="eyebrow">NATHAN CULVER’S</span><h2>Future warfare.<br>Unbroken initiative.</h2><p>Three dice. A 4+ succeeds. Maximum faces explode.<br>Every decision can turn the operation.</p></div><div class="kd-rules-scale">${[4, 6, 8, 10, 12].map((v, i) => `<div><b class="poly-die d${v}">D${v}</b><small>${Object.values(QUALITIES)[i].name}</small></div>`).join("")}</div></section><footer>K-Dwarf: Operations · Nathan Culver · Built on the Crossfire digital tabletop foundation <a href="https://github.com/Nathan-Culver/k-dwarf">SOURCE & RULE COVERAGE ↗</a></footer></main>`;
+  app.innerHTML = `<header class="kd-topbar"><a class="kd-wordmark" href="#" data-home><span class="kd-star">✦</span><div>K-DWARF<small>O P E R A T I O N S</small></div></a><div class="kd-status"><i></i>LOCAL COMMAND LINK<span>v${VERSION} ALPHA</span></div><nav>${button("FORCE FORGE", "data-forces")}${button("FIELD MANUAL", 'data-help="scope"')}${button("OPERATIONS", "data-operations")}</nav></header><main class="kd-shell"><section class="kd-brief"><div><p class="eyebrow">TACTICAL OPERATIONS / ${game.phase.replaceAll("-", " ").toUpperCase()}</p><h1>${SCENARIOS[game.scenario].name}</h1><p>Command the descendants of humanity beneath a long-lived star.</p><div class="kd-phase-strip"><span class="${game.phase === "recon" ? "active" : ""}">01 RECON</span><span class="${game.phase.includes("deployment") ? "active" : ""}">02 DEPLOY</span><span class="${game.phase === "battle" ? "active" : ""}">03 ENGAGE</span></div></div><div class="kd-telemetry"><div><small>INITIATIVE</small><strong class="${game.active ? "red" : "blue"}">${sideName(game.active)} <b>${game.initiative || "—"}</b></strong></div><div><small>YOUR FORCE MORALE</small><strong>${burden}<em> / ${own.fmr}</em></strong><div class="meter"><i style="width:${Math.min(100, 100 * burden / own.fmr)}%"></i></div></div><div><small>OBJECTIVES</small><strong>${game.objectives.filter((o) => o.owner === viewer()).length}<em> / ${game.objectives.length || "—"}</em></strong></div></div></section><section class="kd-directive"><span class="pulse"></span><b>${game.winner !== null ? "OPERATION COMPLETE" : "COMMAND GUIDANCE"}</b><p>${esc(guidance())}</p>${help(game.phase === "battle" ? "actions" : "recon")}</section><div class="kd-layout"><section class="map-panel panel ${expanded ? "expanded" : ""}"><div class="panel-head"><div><span class="eyebrow">${view === "tabletop" ? "HOLOGRAPHIC TABLETOP" : "TACTICAL FOOTPRINTS"}</span><h3>${esc(game.options.battlefield.name)}</h3></div><div class="map-tools">${button(view === "tabletop" ? "2D PLAN" : "3D TABLE", "data-view")}${button("FIT", 'data-camera="fit"')}${button("FULL SCREEN", 'data-camera="expand"')}</div></div><div class="map-viewport" tabindex="0" aria-label="K-Dwarf battlefield: tap to select; drag to move or pan"><div class="battle-stage">${view === "tactical" ? renderMap(displayGame(), mapState()) : ""}</div></div>${quickOrders()}<div class="map-footer"><span>4+ SUCCESS · MAXIMUM EXPLODES</span><span>D4 / D6 / D8 / D10 / D12</span>${historyControls()}</div>${expanded ? playHUD() : ""}${context ? contextHTML() : ""}</section>${!expanded ? `<aside class="kd-sidebar"><nav class="kd-desk-tabs">${tabs().map(([id, name]) => button(name, `data-tab="${id}"`, tab === id ? "active" : "")).join("")}</nav>${panel()}</aside>` : ""}</div><section class="kd-bottom"><div><span class="eyebrow">NATHAN CULVER’S</span><h2>Future warfare.<br>Unbroken initiative.</h2><p>Three dice. A 4+ succeeds. Maximum faces explode.<br>Every decision can turn the operation.</p></div><div class="kd-rules-scale">${[4, 6, 8, 10, 12].map((v, i) => `<div><b class="poly-die d${v}">D${v}</b><small>${Object.values(QUALITIES)[i].name}</small></div>`).join("")}</div></section><footer>K-Dwarf: Operations · Nathan Culver · Built on the Crossfire digital tabletop foundation <a href="https://github.com/Nathan-Culver/k-dwarf">SOURCE & RULE COVERAGE ↗</a></footer></main>`;
   const opts = { game: displayGame(), state: mapState(), snapshot, onSelect: selectUnit, onPoint: selectPoint, onContext: (id, p) => {
     context = { id, x: Math.max(8, Math.min(innerWidth - 240, p.x)), y: Math.max(56, Math.min(innerHeight - 300, p.y)) };
     render();
@@ -172,7 +177,7 @@ function render() {
     }
   }
   scheduleAI();
-  if (game.pendingDice && !dialog.open) {
+  if (game.pendingDice && !dialog.open && !historyReview) {
     try {
       const r = advanceDiceAction(game);
       game = r.game;
@@ -191,14 +196,22 @@ function panel() {
   return tab === "roster" ? roster() : tab === "command" ? commandPanel() : tab === "morale" ? moralePanel() : tab === "log" ? logPanel() : tab === "camera" ? cameraPanel() : ordersPanel();
 }
 function playHUD() {
-  return `<div class="play-hud"><div class="play-top"><div class="play-turn"><b>${sideName(game.active)} / INIT ${game.initiative || "—"}</b><small>K-DWARF OPERATIONS</small></div><div class="play-tabs" role="tablist" aria-label="Table controls">${tabs().map(([id, name]) => `<button role="tab" aria-selected="${tab === id}" data-tab="${tab === id ? "" : id}">${name}</button>`).join("")}${button("OPS", "data-operations")}</div>${button("EXIT", 'data-camera="expand"')}</div>${tab ? `<section class="play-drawer" role="tabpanel" aria-label="${tab}">${button("×", 'data-tab="" aria-label="Close table menu"', "play-drawer-close")}${panel()}</section>` : ""}<div class="play-bottom"><span>${selected.length ? `${selected.length} selected · ${selected[0]}` : "SELECT A TEAM. RETAIN THE INITIATIVE."}</span>${button(multi ? "MULTI ✓" : "MULTI", "data-multi")}${button("MOVE", 'data-camera-mode="move"', !pan && !orbit ? "primary" : "")}${button("PAN", 'data-camera-mode="pan"', pan ? "primary" : "")}${view === "tabletop" ? button("ORBIT", 'data-camera-mode="orbit"', orbit ? "primary" : "") : ""}${button("FIT", 'data-camera="fit"')}</div></div>`;
+  return `<div class="play-hud"><div class="play-top"><div class="play-turn"><b>${sideName(game.active)} / INIT ${game.initiative || "—"}</b><small>K-DWARF OPERATIONS</small></div><div class="play-tabs" role="tablist" aria-label="Table controls">${tabs().map(([id, name]) => `<button role="tab" aria-selected="${tab === id}" data-tab="${tab === id ? "" : id}">${name}</button>`).join("")}${button("OPS", "data-operations")}</div>${button("EXIT", 'data-camera="expand"')}</div>${tab ? `<section class="play-drawer" role="tabpanel" aria-label="${tab}">${button("×", 'data-tab="" aria-label="Close table menu"', "play-drawer-close")}${panel()}</section>` : ""}<div class="play-history">${historyControls()}</div><div class="play-bottom"><span>${selected.length ? `${selected.length} selected · ${selected[0]}` : "SELECT A TEAM. RETAIN THE INITIATIVE."}</span>${button(multi ? "MULTI ✓" : "MULTI", "data-multi")}${button("MOVE", 'data-camera-mode="move"', !pan && !orbit ? "primary" : "")}${button("PAN", 'data-camera-mode="pan"', pan ? "primary" : "")}${view === "tabletop" ? button("ORBIT", 'data-camera-mode="orbit"', orbit ? "primary" : "") : ""}${button("FIT", 'data-camera="fit"')}</div></div>`;
 }
 function quickOrders() {
   if (game.phase !== "battle" || !selectedUnits()[0] || game.pending || game.firefight || game.programPending || game.orderWindow || game.events.length || game.smokeChoice || game.combat) return "";
   const u = selectedUnits()[0];
   return `<div class="map-orders ${expanded ? "play-quick-orders" : ""}"><div class="map-order-actions"><b>${esc(u.id)} / ${esc(u.status.toUpperCase())}</b>${["fire", "move", "assault", "rally", "skill", "los"].map((k) => button(k === "assault" ? "MELEE" : k.toUpperCase(), k === "rally" ? "data-rally" : k === "skill" ? "data-skill" : `data-mode="${k}"`)).join("")}${button("MORE", 'data-tab="orders"')}</div>${target && mode !== "los" ? button(mode === "fire" ? "DECLARE FIRE" : mode === "assault" ? "CHARGE INTO CONTACT" : "CONFIRM PLAN", "data-confirm", "primary") : ""}</div>`;
 }
+function historyControls(){return `<div class="history-controls" data-history-controls role="toolbar" aria-label="Undo and redo"><button data-undo ${journal.canUndo?'':'disabled'} title="${esc(journal.undoLabel)}" aria-label="Undo last game decision">↶ UNDO</button><button data-redo ${journal.canRedo?'':'disabled'} title="${esc(journal.redoLabel)}" aria-label="Redo game decision">↷ REDO</button><small>${journal.cursor}/${journal.entries.length} decisions</small></div>`;}
+function refreshHistoryControls(){if(!journal)return;for(const node of document.querySelectorAll('[data-history-controls]'))node.outerHTML=historyControls();}
+function restoreDecision(direction){
+ clearTimeout(aiTimer);paused=true;diceTray?.destroy();diceTray=null;diceRequest=null;dialog.close();
+ try{const label=direction==='undo'?journal.undoLabel:journal.redoLabel;game=journal[direction](game);historyReview=true;selected=[];target=null;context=null;commandSelection=[];tab='orders';forceDrafts=structuredClone(game.options.armies);chosenMap=game.options.battlefield;Store.save(game);render();toast((direction==='undo'?'Undone: ':'Redone: ')+label+' · AI paused.');}catch(e){toast(e.message);}
+}
+function resumeSavedDice(){historyReview=false;try{const r=advanceDiceAction(game);game=r.game;save('Resume saved dice');if(r.done)finishAction();else showDice(r.request);}catch(e){toast(e.message);}}
 function ordersPanel() {
+  if(game.pendingDice)return `<section class="command-body"><h3>SAVED DICE DECISION</h3><p>${game.pendingDice.rolls.length} accepted batch(es) are preserved. Resume to continue this resolution. Redo restores the same accepted faces.</p>${button('RESUME SAVED DICE','data-resume-dice','primary wide')}${historyControls()}</section>`;
   if (game.programPending) {
     const p = game.programPending, hackers = E.living(game).filter((u2) => u2.side !== p.side && u2.type === "hacker" && !["suppressed", "routed"].includes(u2.status) && !u2.noCounterware && ["standard", "hunter"].includes(u2.module));
     return `<section class="command-body"><h3>CYBERWARFARE RESPONSE</h3><p>${esc(p.program.toUpperCase())} / ${p.n} successes. Choose Counterware or let it resolve.</p>${hackers.map((h) => button("COUNTERWARE / " + h.id, `data-program-counter="${h.id}"`, "wide")).join("")}${button("LET PROGRAM RESOLVE", 'data-program-counter=""', "primary wide")}</section>`;
@@ -258,7 +271,7 @@ function moralePanel() {
 }
 function logPanel() {
   const r = game.lastRoll;
-  return `<section class="command-body"><h3>DICE TELEMETRY</h3>${r ? `<p>${esc(r.text)}</p><div class="dice">${r.kept.map((v) => `<span class="die poly-die d${r.sides} ${v + (r.modifier || 0) >= 4 ? "hit" : ""}">${v}</span>`).join("")}</div>${r.discarded?.length ? `<p>Discarded: ${r.discarded.join(", ")}</p>` : ""}${r.explosions?.length ? `<p>Explosion batches: ${r.explosions.map((d) => d.join(", ")).join(" → ")}</p>` : ""}` : "<p>No action dice rolled.</p>"}${r?button("VIEW LAST ROLL IN 3D TRAY","data-dice-last","wide"):""}<h3>OPERATIONS DISPATCH</h3>${game.log.slice(-35).reverse().map((l) => `<div class="log-entry"><small>INIT ${l.initiative} / ACTION ${l.n}</small>${esc(l.text)}</div>`).join("")}</section>`;
+  return `<section class="command-body"><h3>DICE TELEMETRY</h3>${r ? `<p>${esc(r.text)}</p><div class="dice">${r.kept.map((v) => `<span class="die poly-die d${r.sides} ${v + (r.modifier || 0) >= 4 ? "hit" : ""}">${v}</span>`).join("")}</div>${r.discarded?.length ? `<p>Discarded: ${r.discarded.join(", ")}</p>` : ""}${r.explosions?.length ? `<p>Explosion batches: ${r.explosions.map((d) => d.join(", ")).join(" → ")}</p>` : ""}` : "<p>No action dice rolled.</p>"}${r?button("VIEW LAST ROLL IN 3D TRAY","data-dice-last","wide"):""}<h3>ACTIVE FIRING MARKERS</h3><p>Each line remains until its firer or target next takes an action. Recon fire marks its area and revealed contacts without damage.</p>${activeFireEvents(game,viewer()).map(e=>`<div class="active-fire-entry"><b>${esc(FIRE_MODE_NAMES[e.mode])}</b><p>${esc(e.firerId)} → ${esc(e.targetId||e.featureId)}<br>${esc(e.result)}</p>${button('FIRER',`data-select="${e.firerId}"`)}${e.targetId?button('TARGET',`data-select="${e.targetId}"`):''}</div>`).join('')||'<p>No active firing markers.</p>'}<h3>OPERATIONS DISPATCH</h3>${game.log.slice(-35).reverse().map((l) => `<div class="log-entry"><small>INIT ${l.initiative} / ACTION ${l.n}</small>${esc(l.text)}</div>`).join("")}</section>`;
 }
 function cameraPanel() {
   const c = snapshot || {};
@@ -379,7 +392,7 @@ function confirm() {
   }
 }
 function operations() {
-  show("Operations control", `<div class="notice">${esc(SCENARIOS[game.scenario].name)} · ${game.phase} · Initiative ${game.initiative}</div><label class="member"><input id="auto-roll" type="checkbox" ${game.options.autoRoll ? "checked" : ""}>Auto-roll my dice ${help("dice")}</label><div class="button-list">${button("3D dice table / bags & presets", "data-dice-table")}${button("Plan a new operation", "data-new")}${button("Export save to this device", "data-export")}${button("Import a save file", "data-import")}${button("Store local checkpoint", "data-checkpoint")}${button("Restore checkpoint", "data-restore")}${button("Force Forge / list building", "data-forces")}${button("Battlefield builder / saved maps", "data-maps")}${button("Field manual & rule coverage", 'data-help="scope"')}</div><p>Autosave and ten map slots are local to this browser. Export portable files for another device. Crossfire saves and map slots are kept separate.</p>`);
+  show("Operations control", `<div class="notice">${esc(SCENARIOS[game.scenario].name)} · ${game.phase} · Initiative ${game.initiative}</div><label class="member"><input id="auto-roll" type="checkbox" ${game.options.autoRoll ? "checked" : ""}>Auto-roll my dice ${help("dice")}</label><div class="button-list">${historyControls()}${button("3D dice table / bags & presets", "data-dice-table")}${button("Plan a new operation", "data-new")}${button("Export save to this device", "data-export")}${button("Import a save file", "data-import")}${button("Store local checkpoint", "data-checkpoint")}${button("Restore checkpoint", "data-restore")}${button("Force Forge / list building", "data-forces")}${button("Battlefield builder / saved maps", "data-maps")}${button("Implemented rules for review", 'data-implemented-rules')}${button("Field manual & rule coverage", 'data-help="scope"')}</div><p>Autosave and ten map slots are local to this browser. Export portable files for another device. Crossfire saves and map slots are kept separate.</p>`);
 }
 function setup() {
   show("Plan an operation", `<p>Choose a battlefield and two forces. Recon supremacy and marker placement determine the opening deployment.</p><form id="setup"><div class="form-grid"><label>Scenario<select name="scenario">${Object.entries(SCENARIOS).map(([id, s]) => `<option value="${id}" ${game.scenario === id ? "selected" : ""}>${s.name}</option>`).join("")}</select></label><label>Control<select name="mode"><option value="solo">Solo vs AI</option><option value="hotseat" ${game.options.mode === "hotseat" ? "selected" : ""}>Same-device hotseat</option></select></label><label>AI difficulty<select name="difficulty">${["easy", "normal", "hard"].map((d) => `<option ${game.options.difficulty === d ? "selected" : ""}>${d}</option>`).join("")}</select></label><label>Battlefield<select name="battlefield"><option value="current">${esc(chosenMap?.name || "Generated alien frontier")}</option><option value="new">Generate a new battlefield</option></select></label></div><p><b>BLUE</b> ${esc(forceDrafts[0].name)} · ${armyTotals(forceDrafts[0]).points} pts / ${armyTotals(forceDrafts[0]).fmr} FMR<br><b>RED</b> ${esc(forceDrafts[1].name)} · ${armyTotals(forceDrafts[1]).points} pts / ${armyTotals(forceDrafts[1]).fmr} FMR</p>${button("EDIT FORCE LISTS", 'type="button" data-forces', "wide")}${button("BUILD / LOAD BATTLEFIELD", 'type="button" data-maps', "wide")}<label class="member"><input name="autoRoll" type="checkbox" ${game.options.autoRoll ? "checked" : ""}>Auto-roll my dice</label><details><summary>Command boards &amp; draft faction traits</summary>${forceDrafts.map((army,side)=>`<label>${sideName(side)} command board<select name="board${side}">${BOARD_LIST.map(b=>`<option value="${b.id}" ${(army.board||army.nation)===b.id?'selected':''}>${esc(b.name)}${b.provisional?' (PROVISIONAL)':''}</option>`).join('')}</select></label><label>${sideName(side)} subfaction (must match board)<select name="subfaction${side}"><option value="">None</option>${BOARD_LIST.flatMap(b=>b.subfactions).map(f=>`<option value="${f.id}" ${army.subfaction===f.id?'selected':''}>${esc(f.name)} · PROVISIONAL</option>`).join('')}</select></label>`).join('')}<p>Defined abilities retain their effects. Success costs and new faction/subfaction traits are draft proposals. Morale deck: 9×1, 20×2, 20×4, 9×5, exactly two of each of the six specials.</p></details><button class="primary wide">ESTABLISH COMMAND LINK</button></form>`);
@@ -553,10 +566,14 @@ document.addEventListener("click", (e) => {
   const el = e.target.closest("button,a[data-home]");
   if (!el) return;
   const d = el.dataset;
+  if(d.undo!==undefined){restoreDecision('undo');return;}
+  if(d.redo!==undefined){restoreDecision('redo');return;}
+  if(d.resumeDice!==undefined){resumeSavedDice();return;}
   if (d.close !== void 0) {
     close();
     return;
   }
+  if(d.implementedRules!==undefined){window.open('./rules.html','_blank','noopener');return;}
   if (d.help) {
     helpDialog(d.help);
     return;
@@ -595,7 +612,7 @@ document.addEventListener("click", (e) => {
     try {
       const restored = Store.load("checkpoint");
       if (!restored) throw Error("No checkpoint.");
-      game = restored;
+      game = restored; journal=new GameHistory(game,E.validateSave);historyReview=journal.canRedo;
       selected = [];
       target = null;
       paused = true;
@@ -971,7 +988,7 @@ document.addEventListener("submit", (e) => {
       options.armies = structuredClone(forceDrafts);
       for(const side of [0,1]){const army=options.armies[side];army.board=d.get('board'+side);army.subfaction=d.get('subfaction'+side)||null;if(army.subfaction&&!getCommandBoard(army.board).subfactions.some(f=>f.id===army.subfaction))throw Error('Choose a subfaction belonging to the selected board, or None.');}
       if (d.get("battlefield") === "current" && chosenMap) options.battlefield = structuredClone(chosenMap);
-      game = E.newGame(options);
+      game = E.newGame(options);journal=new GameHistory(game,E.validateSave);historyReview=false;
       selected = [];
       target = null;
       paused = false;
@@ -1017,7 +1034,7 @@ q("#import-file").addEventListener("change", async (e) => {
   const f = e.target.files[0];
   if (!f) return;
   try {
-    game = Store.decode(await f.text());
+    game = Store.decode(await f.text());journal=new GameHistory(game,E.validateSave);historyReview=journal.canRedo;
     selected = [];
     target = null;
     paused = true;
@@ -1064,3 +1081,5 @@ render();
 if(loadError)toast("Saved battle could not load: "+loadError);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => {
 });
+
+document.addEventListener('keydown',e=>{if(!(e.ctrlKey||e.metaKey)||e.altKey||e.target.closest('input,textarea,select,[contenteditable=true]'))return;const key=e.key.toLowerCase();if(key==='z'||key==='y'){e.preventDefault();restoreDecision(key==='y'||e.shiftKey?'redo':'undo');}});

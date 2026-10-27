@@ -1,6 +1,6 @@
 import {CATALOG} from './catalog.js';
 export {CATALOG};
-export const VERSION='0.2.0',B=32,W=1200,H=1000;
+export const VERSION='0.3.0',B=32,W=1200,H=1000;
 export const QUALITIES={irregular:{name:'Irregular',die:4,points:1,fmr:2},regular:{name:'Regular',die:6,points:3,fmr:3},veteran:{name:'Veteran',die:8,points:5,fmr:4},elite:{name:'Elite',die:10,points:7,fmr:5},super:{name:'Super',die:12,points:9,fmr:5}};
 export const TYPES={'camouflage-marker':{name:'Camouflaged contact',dice:0},'recon-marker':{name:'Recon marker',dice:0},rifle:{name:'Infantry team',dice:3,squad:true},smg:{name:'Assault team',dice:3,squad:true},hmg:{name:'Support weapon',dice:3,squad:true},pc:{name:'Platoon commander',dice:0},cc:{name:'Company commander',dice:0},bc:{name:'Battalion commander',dice:0},fo:{name:'Forward observer',dice:3,squad:true},recon:{name:'Reconnaissance',dice:3,squad:true},medic:{name:'Combat medic',dice:3,squad:true},engineer:{name:'Combat engineer',dice:3,squad:true},hacker:{name:'Cyberwarfare',dice:3,squad:true},android:{name:'Combat android',dice:3,squad:true},vehicle:{name:'Combat vehicle',dice:3,squad:true},drone:{name:'Combat drone',dice:3,squad:true},heavy:{name:'Heavy weapon',dice:3,squad:true},indirect:{name:'Indirect battery',dice:3,squad:true},crew:{name:'Weapon crew',dice:3,squad:true}};
 export const NATIONS={athenian:{name:'The Athenian Order',command:'free'},expedition:{name:'Expeditionary force',command:'free'},dominion:{name:'Opposing force',command:'free'}};

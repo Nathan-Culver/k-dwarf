@@ -1,3 +1,4 @@
+import {validateHistory} from './history.js';
 import {validateGameSave as validateLegacySave} from './legacy-save-validation.js';
 import {commandState} from './command.js';
 import {getCommandAbility, getCommandBoard, getCommandSubfaction, getBoardAbilities, COMMAND_ABILITIES} from './command-board.js';
@@ -48,6 +49,11 @@ function validateGameSave(s) {
     if(s.pending){s.pending.reactors=[];s.pending.progress=0;}
     if(s.smokeChoice){s.smokeChoice.untilSide=s.smokeChoice.side;delete s.smokeChoice.expires;}
     s.log.push({n:s.actions,initiative:s.initiative,side:s.active,kind:'event',text:'Imported v0.1 battle. Retired symbol-based command resources were cleared; roll the new mixed bowl. Battlefield and action dice are preserved.'});s.log=s.log.slice(-300);
+  }
+  if(s?.format==='kdwarf-operations'&&s.version==='0.2.0'){s=structuredClone(s);s.version=VERSION;}
+  if(s?.format==='kdwarf-operations'&&s.version===VERSION){
+    if(s.fireEvents===undefined)s.fireEvents=[];
+    if(s.fireEventSerial===undefined)s.fireEventSerial=0;
   }
   if (!obj(s) || s.format !== "kdwarf-operations" || s.version !== VERSION || !own(SCENARIOS, s.scenario) || !int(s.seed, 0, 4294967295) || !side(s.active) || !nullableSide(s.winner) || !int(s.initiative) || !int(s.actions) || !en(s.phase, ["recon", "deployment-markers", "deployment", "battle"]) || !bool(s.deployment) || !obj(s.options) || !en(s.options.mode, ["solo", "hotseat"]) || !en(s.options.difficulty, ["easy", "normal", "hard"]) || !bool(s.options.autoRoll) || !all(s.units, obj, 240, 2)) fail();
   if (!all(s.options.armies, (a) => {
@@ -176,6 +182,8 @@ function validateGameSave(s) {
   if (!nilopt(s.smokeChoice, (c) => obj(c) && side(c.side) && side(c.chooser) && c.chooser === 1 - c.side && ref(c.id) && point(c.target) && num(c.radius, 0.1, 1e3) && opt(c.untilSide,side) && opt(c.expires,v=>int(v)))) fail("pending smoke placement");
   if (!nilopt(s.pendingDice, (p) => obj(p) && action(p.action) && all(p.sides, side, 2, 1) && p.sides.join(",") === (s.options.mode === "hotseat" ? "0,1" : "0") && all(p.rolls, (r) => obj(r) && side(r.side) && p.sides.includes(r.side) && text(r.label, 500) && en(r.sides, [4, 6, 8, 10, 12]) && dice(r.dice, r.sides), 2e3))) fail("pending dice");
   if (!nilopt(s.lastRoll, (r) => result(r) && dice(r.dice, r.sides, 2e4) && text(r.text, 1e3))) fail("last dice result");
+  if(!all(s.fireEvents,e=>obj(e)&&identifier(e.id)&&ref(e.firerId)&&maybeRef(e.targetId)&&nilopt(e.featureId,v=>terrainIds.has(v))&&(ref(e.targetId)||terrainIds.has(e.featureId))&&side(e.side)&&position(e.from)&&position(e.to)&&en(e.mode,['single','group','crossfire','recon','reactive','indirect'])&&text(e.result,300)&&int(e.action,0,s.actions)&&int(e.initiative,0,s.initiative)&&int(e.shotCount,1,100000)&&bool(e.concealed),2000)||!uniq(s.fireEvents.map(e=>e.id))||!int(s.fireEventSerial))fail('persistent firing markers');
+  try{validateHistory(s.history,s.historyCursor??s.history?.length);}catch{fail('undo/redo history');}
   if (!nilopt(s.lastFire, (f) => obj(f) && int(f.action, 0, s.actions) && int(f.initiative, 0, s.initiative) && bool(f.reactive) && all(f.shots, (v) => obj(v) && ref(v.firerId) && ref(v.targetId) && side(v.side) && position(v.from) && position(v.to) && text(v.result, 200) && opt(v.concealed, bool) && opt(v.sides, (n) => en(n, [4, 6, 8, 10, 12])) && dice(v.dice, v.sides || 12, 2e4) && opt(v.pool, result), 2e3))) fail("last shot record");
   if (!all(s.lastMoves, (m) => obj(m) && targetRef(m.id) && position(m.from) && position(m.to) && int(m.initiative, 0, s.initiative), 16)) fail("movement trails");
   if (!all(s.log, (l) => obj(l) && int(l.n, 0, s.actions) && int(l.initiative, 0, s.initiative) && side(l.side) && text(l.text, 4e3) && en(l.kind, ["event", "fire", "rally", "recon", "initiative", "combat", "victory", "skill", "morale", "order"]) && nilopt(l.dice, (v) => dice(v, 12, 2e4)), 300) || !all(s.history, obj, 1e3)) fail("event history");

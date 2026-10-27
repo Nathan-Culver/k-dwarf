@@ -5,6 +5,8 @@
     "steps": 38,
     "actions": 17,
     "winner": 1,
+    "restores": 2,
+    "historyEntries": 38,
     "error": null
   },
   {
@@ -13,6 +15,8 @@
     "steps": 76,
     "actions": 47,
     "winner": 0,
+    "restores": 4,
+    "historyEntries": 40,
     "error": null
   },
   {
@@ -21,6 +25,8 @@
     "steps": 49,
     "actions": 27,
     "winner": 0,
+    "restores": 2,
+    "historyEntries": 40,
     "error": null
   },
   {
@@ -29,6 +35,8 @@
     "steps": 61,
     "actions": 32,
     "winner": 1,
+    "restores": 3,
+    "historyEntries": 40,
     "error": null
   },
   {
@@ -37,6 +45,8 @@
     "steps": 23,
     "actions": 11,
     "winner": 0,
+    "restores": 1,
+    "historyEntries": 23,
     "error": null
   }
 ]
