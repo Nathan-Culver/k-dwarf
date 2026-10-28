@@ -2,51 +2,51 @@
   {
     "difficulty": "easy",
     "quality": "irregular",
-    "steps": 38,
-    "actions": 17,
-    "winner": 1,
-    "restores": 2,
-    "historyEntries": 38,
+    "steps": 70,
+    "actions": 38,
+    "winner": 0,
+    "restores": 3,
+    "historyEntries": 40,
     "error": null
   },
   {
     "difficulty": "normal",
     "quality": "regular",
-    "steps": 76,
-    "actions": 47,
-    "winner": 0,
-    "restores": 4,
-    "historyEntries": 40,
-    "error": null
-  },
-  {
-    "difficulty": "hard",
-    "quality": "veteran",
-    "steps": 49,
-    "actions": 27,
-    "winner": 0,
-    "restores": 2,
-    "historyEntries": 40,
-    "error": null
-  },
-  {
-    "difficulty": "hard",
-    "quality": "elite",
     "steps": 61,
-    "actions": 32,
-    "winner": 1,
+    "actions": 30,
+    "winner": 0,
     "restores": 3,
     "historyEntries": 40,
     "error": null
   },
   {
     "difficulty": "hard",
-    "quality": "super",
-    "steps": 23,
-    "actions": 11,
+    "quality": "veteran",
+    "steps": 36,
+    "actions": 18,
+    "winner": 1,
+    "restores": 2,
+    "historyEntries": 36,
+    "error": null
+  },
+  {
+    "difficulty": "hard",
+    "quality": "elite",
+    "steps": 50,
+    "actions": 29,
     "winner": 0,
-    "restores": 1,
-    "historyEntries": 23,
+    "restores": 2,
+    "historyEntries": 40,
+    "error": null
+  },
+  {
+    "difficulty": "hard",
+    "quality": "super",
+    "steps": 48,
+    "actions": 31,
+    "winner": 0,
+    "restores": 2,
+    "historyEntries": 40,
     "error": null
   }
 ]

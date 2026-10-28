@@ -55,7 +55,7 @@ export function validateGameSave(s){
  if(!nilopt(s.lastRoll,r=>result(r)&&dice(r.dice,r.sides,20000)&&text(r.text,1000)))fail('last dice result');
  if(!nilopt(s.lastFire,f=>obj(f)&&int(f.action,0,s.actions)&&int(f.initiative,0,s.initiative)&&bool(f.reactive)&&all(f.shots,v=>obj(v)&&ref(v.firerId)&&ref(v.targetId)&&side(v.side)&&position(v.from)&&position(v.to)&&text(v.result,200)&&opt(v.concealed,bool)&&opt(v.sides,n=>en(n,[4,6,8,10,12]))&&dice(v.dice,v.sides||12,20000)&&opt(v.pool,result),2000)))fail('last shot record');
  if(!all(s.lastMoves,m=>obj(m)&&ref(m.id)&&position(m.from)&&position(m.to)&&int(m.initiative,0,s.initiative),16))fail('movement trails');
- if(!all(s.log,l=>obj(l)&&int(l.n,0,s.actions)&&int(l.initiative,0,s.initiative)&&side(l.side)&&text(l.text,4000)&&en(l.kind,['event','fire','rally','recon','initiative','combat','victory','skill','morale','order'])&&nilopt(l.dice,v=>dice(v,12,20000)),300)||!all(s.history,obj,1000))fail('event history');
+ if(!all(s.log,l=>obj(l)&&int(l.n,0,s.actions)&&int(l.initiative,0,s.initiative)&&side(l.side)&&text(l.text,4000)&&en(l.kind,['event','move','fire','rally','recon','initiative','combat','victory','skill','morale','order'])&&nilopt(l.dice,v=>dice(v,12,20000)),300)||!all(s.history,obj,1000))fail('event history');
  if(!nilopt(s.actionContext,c=>obj(c)&&text(c.kind,40)&&refs(c.ids)&&nilopt(c.orderScope,identifier)))fail('action context');
  if(!opt(s.commandScopeSerial,v=>int(v))||!nilopt(s.activeOrderScope,identifier))fail('command scope');
  return s;

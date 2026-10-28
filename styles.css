@@ -43,3 +43,60 @@ dialog.dice-room-dialog{width:min(1020px,calc(100vw - 16px));max-width:none;max-
 
 .fire-event,.fire-unit-badge{pointer-events:none}.fire-caption{font-family:ui-monospace,monospace;font-weight:700;fill:#fff0cb;stroke:#071722;stroke-width:3.5px;paint-order:stroke;stroke-linejoin:round}.fire-tracer{stroke-dasharray:10 30;animation:fire-flight .8s linear infinite}.fire-muzzle{animation:fire-muzzle 1.1s ease-in-out infinite}.fire-impact{animation:fire-impact 1.5s ease-in-out infinite;transform-box:fill-box;transform-origin:center}@keyframes fire-flight{to{stroke-dashoffset:-80}}@keyframes fire-muzzle{0%,100%{opacity:1}45%{opacity:.2}}@keyframes fire-impact{0%,100%{opacity:.9;transform:scale(1)}50%{opacity:.4;transform:scale(1.2)}}@media(prefers-reduced-motion:reduce){.fire-tracer,.fire-muzzle,.fire-impact{animation:none}.fire-tracer{stroke-dasharray:8 12}}
 .history-controls{display:flex;align-items:center;gap:5px;flex-wrap:wrap}.history-controls button{min-height:34px;padding:5px 10px;font:10px ui-monospace,monospace}.history-controls small{font:8px ui-monospace,monospace;color:#9bb4be}.play-history{position:absolute;left:8px;bottom:66px;background:#0a202ae8;border:1px solid #386171;border-radius:5px;padding:4px;pointer-events:auto;backdrop-filter:blur(10px)}.dice-history-controls{padding:8px 12px;border-bottom:1px solid #435463;background:#0d202c}.active-fire-entry{padding:9px;border-left:2px solid #e5ae74;background:#122b36;margin:7px 0}.active-fire-entry button{font-size:9px;min-height:32px}.initiative-pass-note{border-left:3px solid #edb372;padding:9px;background:#2b302d;color:#f1cf9f}
+
+/* Action dice tumble directly over the battlefield, with a small result rail. */
+.map-panel{position:relative}
+.battlefield-dice.dice-room{position:absolute;z-index:35;min-height:0;overflow:hidden;background:transparent;isolation:isolate;padding:0;pointer-events:auto;touch-action:none}
+.battlefield-dice>.tray-board{position:absolute;inset:50px 0 94px;height:auto!important;min-height:0!important;margin:0;border:0;border-radius:0;background:transparent;box-shadow:none}
+.battlefield-dice>.tray-board canvas{width:100%;height:100%}
+.battlefield-dice .tray-watermark,.battlefield-dice .tray-batch{display:none}
+.battlefield-dice> :not(.tray-board):not(.tray-context):not(.tray-result-header):not(.tray-primary-actions):not(.tray-message){display:none}
+.battlefield-dice>.tray-result-header{position:absolute;bottom:45px;left:8px;right:8px;min-height:44px;padding:5px 10px;border-radius:8px;background:#071722ed;display:flex;justify-content:center}
+.battlefield-dice>.tray-result-header>button,.battlefield-dice .tray-total small{display:none}
+.battlefield-dice .tray-total{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:10px}
+.battlefield-dice .tray-total strong{font-size:24px;line-height:1}.battlefield-dice .tray-total span{font-size:11px}
+.battlefield-dice>.tray-context{position:absolute;top:6px;left:8px;right:8px;margin:0;padding:8px;border-radius:6px;background:#071722e8;color:#ffe3ac;text-align:center;font-size:12px;max-height:42px;overflow:auto}
+.battlefield-dice>.tray-primary-actions{position:absolute;bottom:6px;left:8px;right:8px;margin:0;display:flex;justify-content:center}
+.battlefield-dice>.tray-primary-actions>button{display:none}.battlefield-dice>.tray-primary-actions>button.primary{display:block;min-height:36px;min-width:180px;padding:8px 18px}
+.battlefield-dice>.tray-message{position:absolute;top:52px;left:8px;right:8px;background:#071722ed;color:#ffe3ac}
+
+/* A short ballistic burst; provenance lines remain after the smoke clears. */
+.fire-path{opacity:.35}.fire-tracer{stroke-dasharray:3 97;stroke-linecap:round;animation:rapid-bullet .12s linear 6 both;animation-delay:var(--fire-age,0s)}
+.fire-muzzle{animation:muzzle-burst .075s steps(2,end) 10 both;animation-delay:var(--fire-age,0s)}
+.fire-glow{animation:flash-burst .075s steps(2,end) 10 both;animation-delay:var(--fire-age,0s)}
+.fire-smoke{transform-box:fill-box;transform-origin:center;animation:smoke-puff .9s ease-out both;animation-delay:var(--fire-age,0s)}
+.fire-smoke.smoke-second{animation-duration:1.15s}.fire-impact{animation:impact-burst .72s ease-out both;animation-delay:var(--fire-age,0s)}
+@keyframes rapid-bullet{0%{stroke-dashoffset:3;opacity:1}92%{opacity:1}100%{stroke-dashoffset:-100;opacity:0}}
+@keyframes muzzle-burst{0%{opacity:1}100%{opacity:0}}
+@keyframes flash-burst{0%{opacity:.6}100%{opacity:0}}
+@keyframes smoke-puff{0%{opacity:.65;transform:translate(0,0) scale(.3)}100%{opacity:0;transform:translate(-8px,-24px) scale(3)}}
+@keyframes impact-burst{0%{opacity:0;transform:scale(.3)}25%{opacity:1}100%{opacity:0;transform:scale(1.8)}}
+@media(prefers-reduced-motion:reduce){.fire-tracer,.fire-muzzle,.fire-glow,.fire-smoke,.fire-impact{animation:none;opacity:0}}
+
+.battlefield-dice>.tray-message:empty{display:none}
+.battlefield-dice>.tray-physical{display:block!important;position:absolute;top:52px;right:8px;z-index:2;max-height:calc(100% - 155px);overflow:auto;width:min(260px,calc(100% - 16px));padding:7px;font-size:11px;background:#071722ed;border-radius:6px}
+
+.battlefield-dice>.tray-primary-actions>button[data-tray="cancel"]{display:block;min-height:36px;padding:8px;font-size:10px}
+
+/* Full-screen controls share the play surface and keep the browser root mounted. */
+html:fullscreen,html:-webkit-full-screen{width:100%;height:100%;background:#07121b}
+.play-guidance{position:absolute;top:55px;left:8px;max-width:calc(100% - 16px);margin:0;padding:5px 9px;background:#071722c9;color:#e1e9e2;border-radius:5px;font-size:11px;line-height:1.35;pointer-events:none}
+.play-drawer{top:91px;max-height:calc(100dvh - 150px)}
+.play-left-stack{position:absolute;left:max(8px,env(safe-area-inset-left));bottom:56px;width:min(390px,calc(57vw - 16px));display:flex;flex-direction:column;gap:6px;pointer-events:none}
+.play-left-stack>.play-history,.play-left-stack>.play-recent-log,.expanded .play-left-stack>.play-quick-orders{position:static;max-width:100%;width:100%;pointer-events:auto;margin:0}
+.play-left-stack>.play-history{padding:4px}.play-recent-log{background:#071722d9;border:1px solid #396171;border-radius:6px;padding:6px 9px;max-height:155px;overflow:hidden;backdrop-filter:blur(8px)}
+.play-recent-log>button{padding:2px 0;min-height:22px;font:9px ui-monospace,monospace;background:transparent;border:0;color:#f6cc8f}
+.action-log-entry{border-left:2px solid #77c8dd;background:#102c3659;padding:8px;margin:6px 0;overflow-wrap:anywhere}.action-log-entry.red{border-color:#eead7f}
+.action-log-entry small{font:9px ui-monospace,monospace;color:#a9c2ce;display:block}.action-log-entry p{font-size:12px;line-height:1.5;margin:3px 0}.action-log-dice{font:11px ui-monospace,monospace;color:#f2d298}.action-log-empty{font-size:12px;color:#aac0c6}
+.play-recent-log .action-log-entry{padding:3px 6px;margin:3px 0}.play-recent-log .action-log-entry small{font-size:8px}.play-recent-log .action-log-entry p{font-size:10px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.action-log-list{margin:12px 0;max-height:50dvh;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}.play-drawer .action-log-list{max-height:none}
+.play-rules{display:block;width:100%;height:72dvh;border:0;background:#07121b}.board-play dialog{width:min(820px,calc(100vw - 20px));max-height:calc(100dvh - 20px);margin:auto}.board-play dialog .dialog-body{max-height:calc(100dvh - 105px);overflow:auto;overscroll-behavior:contain}
+.expanded .battlefield-dice{z-index:8}.expanded:has(.battlefield-dice) .play-left-stack{display:none}.expanded .battlefield-dice>.tray-context{top:80px}.expanded .battlefield-dice>.tray-board{inset:110px 0 144px}.expanded .battlefield-dice>.tray-result-header{bottom:98px}.expanded .battlefield-dice>.tray-primary-actions{bottom:56px}.expanded .battlefield-dice>.tray-physical{top:110px;max-height:calc(100% - 260px)}
+@media(max-width:760px){.play-guidance{font-size:10px;max-height:32px;overflow:hidden}.play-left-stack{width:calc(100% - 16px)}.play-recent-log{max-width:330px!important}.play-drawer{top:91px;max-height:calc(100dvh - 145px)}.play-top>.play-exit{flex-shrink:0}.play-bottom{overflow-x:auto}.play-bottom>span{display:none}}
+@media(orientation:landscape) and (max-height:500px){.play-guidance{top:45px;font-size:9px}.play-drawer{top:76px;max-height:calc(100dvh - 127px);width:min(360px,48vw)}.play-left-stack{bottom:48px;width:min(350px,48vw)}.play-recent-log{max-height:90px}.play-recent-log .action-log-entry:nth-of-type(2){display:none}.expanded .battlefield-dice>.tray-context{top:70px}.expanded .battlefield-dice>.tray-board{top:97px;bottom:132px}.expanded .battlefield-dice>.tray-result-header{bottom:88px}.expanded .battlefield-dice>.tray-primary-actions{bottom:47px}.expanded .battlefield-dice>.tray-physical{top:97px}.play-left-stack>.play-history .history-controls small{display:none}}
+
+.play-tabs{min-width:0}.command-body input[type=search]{width:100%;min-height:38px;padding:8px;background:#0a1c26;border:1px solid #355563;border-radius:4px;color:#dce9e8}
+
+.expanded:has(.battlefield-dice) .play-bottom [data-pass],.expanded:has(.battlefield-dice) .play-bottom [data-decline],.battlefield-dice>.tray-physical:has(input:disabled){display:none!important}
+
+.static-fire .fire-tracer,.static-fire .fire-smoke,.static-fire .fire-glow,.static-fire .fire-muzzle,.static-fire .fire-impact{display:none}

@@ -122,7 +122,7 @@ Smoke blocks LOS but adds no ordinary cover benefit. Roads are decorative or map
 
 More deployed Recon units wins recon supremacy. Equal counts require bids from zero to twenty. The higher bidder wins and draws that many morale cards at battle start. Equal bids draw one morale card each immediately and roll d12 until unequal; higher wins. These roll-offs use their own procedure rather than the ordinary quality pool.
 
-Recon markers alternate movement. If another friendly marker exists, a moving marker must retain LOS to a friendly marker. It follows terrain-route restrictions and locks at the first detected enemy LOS. This recon-only contact search samples one hundred and one positions along the route. Finish or lock reconnaissance to proceed to deployment markers.
+Recon markers alternate movement while both sides have unlocked markers. An unlocked marker can move again on a later turn. If one side has no unlocked markers, the other side continues; deployment-marker placement begins only once all markers are locked. Lock remaining markers applies only to the current side. Recon markers move independently and do not need LOS to other friendly recon markers. It follows terrain-route restrictions and locks at the first detected enemy LOS. This recon-only contact search samples one hundred and one positions along the route. Finish or lock reconnaissance to proceed to deployment markers.
 
 Each side places at least one deployment marker, otherwise as many as its Recon markers. Alternate starting with the supremacy winner. A marker must be behind at least one friendly Recon marker along its west/east direction and in terrain, or within two bases of a table edge. These markers become capturable objectives.
 

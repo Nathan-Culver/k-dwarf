@@ -56,3 +56,7 @@ These are Nathan Culver's direct rulings. They override conflicting draft text a
 The rulings above are implemented in v0.2.0, including sequential repeated Skills/Counterware windows, two sequential recovery pools, independent reusable decoys, direct melee target damage, bounded transport chains, route-wide fleeting exposure, per-unit movement reactions, armor, smoke expiry, fixed special-card distribution and the mixed command bowl.
 
 New individual command prices and authored faction/subfaction traits remain explicitly provisional for review. See COMMAND-BOARDS.md. Remaining source coverage is tracked separately in COVERAGE.md; additional broad questions are not needed to use the rulings already supplied.
+
+## Recon independence — 28 October 2026
+
+Friendly recon markers do not need to see each other. Their movement is independent; remove the friendly recon LOS-chain requirement. Enemy-contact locking, terrain-route rules, and alternating patrol turns still apply.

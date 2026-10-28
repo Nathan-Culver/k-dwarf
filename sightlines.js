@@ -12,7 +12,7 @@ export function sightlinePreview(s,state={}){
  return selected.map(f=>{
   const spotting=sight(s,f,target),direct=sight(s,f,target,{direct:true});
   const error=state.mode==='fire'||s.pending?fireEligibility(s,f,{id:'point',side:1-f.side,...target},{reactive:!!s.pending}):!direct.clear?direct.reason:null;
-  return{from:direct.from||firePoint(s,f),to:direct.to||firePoint(s,target),clear:!error,label:error||spotting.reason};
+  return{from:direct.from||firePoint(s,f),to:direct.to||firePoint(s,target),clear:!error,blocker:direct.clear?null:direct.blocker,label:error||spotting.reason};
  });
 }
 

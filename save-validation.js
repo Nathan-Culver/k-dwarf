@@ -186,7 +186,7 @@ function validateGameSave(s) {
   try{validateHistory(s.history,s.historyCursor??s.history?.length);}catch{fail('undo/redo history');}
   if (!nilopt(s.lastFire, (f) => obj(f) && int(f.action, 0, s.actions) && int(f.initiative, 0, s.initiative) && bool(f.reactive) && all(f.shots, (v) => obj(v) && ref(v.firerId) && ref(v.targetId) && side(v.side) && position(v.from) && position(v.to) && text(v.result, 200) && opt(v.concealed, bool) && opt(v.sides, (n) => en(n, [4, 6, 8, 10, 12])) && dice(v.dice, v.sides || 12, 2e4) && opt(v.pool, result), 2e3))) fail("last shot record");
   if (!all(s.lastMoves, (m) => obj(m) && targetRef(m.id) && position(m.from) && position(m.to) && int(m.initiative, 0, s.initiative), 16)) fail("movement trails");
-  if (!all(s.log, (l) => obj(l) && int(l.n, 0, s.actions) && int(l.initiative, 0, s.initiative) && side(l.side) && text(l.text, 4e3) && en(l.kind, ["event", "fire", "rally", "recon", "initiative", "combat", "victory", "skill", "morale", "order"]) && nilopt(l.dice, (v) => dice(v, 12, 2e4)), 300) || !all(s.history, obj, 1e3)) fail("event history");
+  if (!all(s.log, (l) => obj(l) && int(l.n, 0, s.actions) && int(l.initiative, 0, s.initiative) && side(l.side) && text(l.text, 4e3) && en(l.kind, ["event", "move", "fire", "rally", "recon", "initiative", "combat", "victory", "skill", "morale", "order"]) && nilopt(l.dice, (v) => dice(v, 12, 2e4)), 300) || !all(s.history, obj, 1e3)) fail("event history");
   if (!nilopt(s.actionContext, (c) => obj(c) && text(c.kind, 40) && refs(c.ids) && nilopt(c.orderScope, identifier))) fail("action context");
   if (!opt(s.commandScopeSerial, (v) => int(v)) || !nilopt(s.activeOrderScope, identifier)) fail("command scope");
   return s;

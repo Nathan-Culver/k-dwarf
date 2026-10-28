@@ -13,3 +13,33 @@ test('action requests automatically configure all five quality types, skill/rall
 test('shooting, melee and smoke request the engine-calculated dice without changing action rules',()=>{const s=fixture('elite'),u=s.units[0],t=s.units[4];E.directFire(s,[u.id],t.id);let r=beginDiceAction(s,{type:'firefight',decline:true});assert(r.request.label.includes('Shooting'));assert.equal(r.request.sides,10);assert.equal(r.request.base,3);s.firefight=null;s.combat={side:0,target:t.id,attackers:[u.id],defenders:[t.id]};r=beginDiceAction(s,{type:'combat'});assert(r.request.label.includes('Melee'));assert.equal(r.request.sides,10);s.combat=null;u.type='fo';r=beginDiceAction(s,{type:'smoke',id:u.id,to:{x:500,y:200}});assert(r.request.label.includes('Smoke mission'));assert.equal(r.request.sides,10);});
 test('accepting a visible game batch commits values before animation; reload cannot reroll it',()=>{const s=fixture(),u=s.units[0];u.status='pinned';const r=beginDiceAction(s,{type:'rally',id:u.id}),accepted=recordDice(r.game,r.request.generated),saved=decode(encode(accepted));assert.deepEqual(saved.pendingDice.rolls[0].dice,r.request.generated);assert.throws(()=>beginDiceAction(saved,{type:'rally',id:u.id}),/Finish/);const resumed=advanceDiceAction(saved);assert(resumed.done||resumed.request.label!==r.request.label);});
 test('convex rigid bodies bounce, collide and remain on a bounded physical table',async()=>{const{createDicePhysics}=await import('../dice-physics.js');const descriptors=[4,6,8,10,12,20].map((sides,i)=>({record:{sides,held:false},x:60+i*55,y:140,q:diceShape(sides).top(1)}));const physics=createDicePhysics(descriptors,{width:420,height:300,radius:22});let seed=42;physics.toss(()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/2**32;});for(let i=0;i<600;i++)physics.step(1/90);physics.sync();for(const d of descriptors){assert(Number.isFinite(d.x)&&Number.isFinite(d.y)&&Number.isFinite(d.z));assert(d.z>0);assert(d.x>=0&&d.x<=420);assert(d.y>=0&&d.y<=300);for(const f of diceShape(d.record.sides).faces)for(const p of f.points){const v=p.clone().applyQuaternion(d.q),x=d.x+v.x*22,y=d.y+(v.y*.88-v.z*.48)*22-d.z;assert(x>=0&&x<=420&&y>=0&&y<=300,'projected dice must stay fully inside the tray');}}physics.freeze();assert(physics.bodies.every(b=>b.fixedRotation));physics.destroy();assert.equal(physics.world.bodies.length,0);});
+
+
+test('planned dice throws keep one face numbering throughout motion and land on accepted values',async()=>{
+ const {planDiceRoll,createDicePhysics}=await import('../dice-physics.js');const {diceShape}=await import('../dice-shapes.js');const {Quaternion}=await import('three');
+ for(const sides of [4,6,8,10,12,20])for(const face of [1,sides]){
+  const shape=diceShape(sides),d={record:{sides,face,held:false},shape,x:150,y:150,z:0,q:new Quaternion()};
+  const physics=createDicePhysics([d],{width:400,height:300,radius:25});
+  let seed=917;const random=()=>((seed=Math.imul(seed,1664525)+1013904223>>>0)/4294967296);
+  const plan=planDiceRoll(physics,[d],{random});
+  assert(plan.frames.length>100);assert.equal(plan.offsets.length,1);
+  const numbering=shape.faces.map(f=>(f.value-1+plan.offsets[0])%sides+1);
+  assert.equal(new Set(numbering).size,sides);
+  const final=plan.frames.at(-1)[0],upper=shape.faces.reduce((a,b)=>a.normal.clone().applyQuaternion(final.q).z>b.normal.clone().applyQuaternion(final.q).z?a:b);
+  assert.equal(numbering[upper.value-1],face);
+  assert(plan.frames.some(frame=>frame[0].q.angleTo(final.q)>.1));
+  assert.deepEqual(shape.faces.map(f=>(f.value-1+plan.offsets[0])%sides+1),numbering);
+  physics.destroy();
+ }
+});
+test('planned percentile throws preserve held faces and resolve both percentile components',async()=>{
+ const {planDiceRoll,createDicePhysics}=await import('../dice-physics.js');const {diceShape}=await import('../dice-shapes.js');const {Quaternion}=await import('three');
+ const descriptors=['tens','ones'].map(part=>({record:{sides:100,face:73,held:false},part,shape:diceShape(10),x:100+(part==='ones'?100:0),y:150,z:0,q:new Quaternion()}));
+ const held={record:{sides:6,face:4,held:true},shape:diceShape(6),x:300,y:150,z:0,q:diceShape(6).top(4),faceOffset:0};descriptors.push(held);
+ const physics=createDicePhysics(descriptors,{width:500,height:300,radius:25});const plan=planDiceRoll(physics,descriptors,{random:()=>.45});
+ for(const [i,expected]of [[0,8],[1,4]]){
+  const d=descriptors[i],q=plan.frames.at(-1)[i].q,upper=d.shape.faces.reduce((a,b)=>a.normal.clone().applyQuaternion(q).z>b.normal.clone().applyQuaternion(q).z?a:b);
+  assert.equal((upper.value-1+plan.offsets[i])%10+1,expected);
+ }
+ assert.equal(plan.offsets[2],0);assert(plan.frames.at(-1)[2].q.angleTo(held.shape.top(4))<1e-6);physics.destroy();
+});
