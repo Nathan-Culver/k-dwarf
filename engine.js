@@ -156,8 +156,6 @@ function moveRecon(s, id, to, lock = false) {
   if (!tableContains(s, to, 32)) throw Error("Keep the marker on the table.");
   const route = movementTerrain(s, u, to);
   if (!route.ok) throw Error(route.reason);
-  const friendly = s.recon.markers.filter((v) => v.side === u.side && v.id !== u.id);
-  if (friendly.length && !friendly.some((v) => sight(s, { ...to, pointOnly: true }, { ...v, pointOnly: true }).clear)) throw Error("Maintain the friendly recon LOS chain.");
   const enemies = s.recon.markers.filter((v) => v.side !== u.side), cuts = [];
   for (let i = 0; i <= 100; i++) {
     const p = mix(u, to, i / 100);
@@ -171,22 +169,25 @@ function moveRecon(s, id, to, lock = false) {
     u.locked = true;
     for (const e of enemies) if (sight(s, { ...u, pointOnly: true }, { ...e, pointOnly: true }).clear) e.locked = true;
   }
-  s.recon.turn = 1 - s.recon.turn;
-  for (const side of [0, 1]) {
-    const ms = s.recon.markers.filter((m) => m.side === side);
-    if (!ms.length || ms.every((m) => m.locked)) {
-      s.phase = "deployment-markers";
-      s.recon.turn = s.recon.supremacy;
-      break;
-    }
+  advanceReconTurn(s);
+  log(s, u.id + " moved" + (u.locked ? " and locked." : "."), "recon");
+}
+function advanceReconTurn(s) {
+  const canMove = side => s.recon.markers.some(m => m.side === side && !m.locked);
+  const other = 1 - s.recon.turn;
+  if (canMove(other)) s.recon.turn = other;
+  else if (!canMove(s.recon.turn)) {
+    s.phase = "deployment-markers";
+    s.recon.turn = s.recon.supremacy;
   }
-  log(s, "Recon marker moved" + (u.locked ? " and locked." : "."));
 }
 function finishRecon(s) {
+  if (s.phase !== "recon") throw Error("Not in reconnaissance.");
   if (s.recon.supremacy === null) throw Error("Resolve supremacy first.");
-  for (const m of s.recon.markers.filter((m2) => m2.side === s.recon.turn)) m.locked = true;
-  s.phase = "deployment-markers";
-  s.recon.turn = s.recon.supremacy;
+  const side = s.recon.turn;
+  for (const m of s.recon.markers.filter(m => m.side === side)) m.locked = true;
+  advanceReconTurn(s);
+  log(s, `${side ? "Red" : "Blue"} locks its remaining recon markers.`);
 }
 function placeDeploymentMarker(s, side, to) {
   if (s.phase !== "deployment-markers") throw Error("Not placing deployment markers.");
@@ -239,13 +240,18 @@ function available(s, allowCombat = false) {
   if (s.routQueue?.length) throw Error("Resolve compulsory routs first.");
   if (s.phase !== "battle" || s.winner !== null || s.pending || s.firefight || s.programPending || s.smokeChoice || s.events.length || s.orderWindow) throw Error("Resolve the current phase or pending decision first.");
 }
-function canMove(s, u, end, kind = "move") {
+export function movementStartError(u, kind = "move") {
   if (!u || u.dead || u.surrendered || u.offTable) return "Choose a deployed stand.";
   if(u.decoy&&kind==="assault")return "Decoys cannot assault or attack.";
   if (u.type === "indirect" && u.permanent && kind !== "pivot") return "A permanent battery cannot move from its firing position.";
   if (u.towed && kind !== "pivot") return "A towed weapon moves with its limbered vehicle; it may only pivot when unlimbered.";
   if (u.status !== "ready" && kind !== "prone") return "Rally this stand before moving.";
   if (u.prone && !["stand", "prone"].includes(kind)) return "Stand up before moving.";
+  return null;
+}
+function canMove(s, u, end, kind = "move") {
+  const startError = movementStartError(u, kind);
+  if (startError) return startError;
   if (!onBoard({ ...u, ...end }, s)) return "Keep the base inside the table.";
   if (["pivot", "stand", "prone"].includes(kind)) return null;
   if (kind === "retreat") {
@@ -311,6 +317,7 @@ function beginMove(s, ids, to, options = {}) {
   beginUnitAction(s,ids);
   s.actions++;
   s.pending = { side: s.active, moves: plan.moves, index: 0, kind: options.kind || "move", target: options.target || null, reacted: false, reactors:[],progress:0, shift: false };
+  log(s, `${ids.join(", ")} declares ${options.kind || "movement"} to (${Math.round(to.x)}, ${Math.round(to.y)}). Opponent may react.`, "move");
   advanceMovement(s);
 }
 function reactionWindows(s, f, shooting = true) {
@@ -354,7 +361,7 @@ function finishMover(s, t = 1) {
       if (o.owner !== null && o.owner !== u.side) drawMorale(s, o.owner, "Objective captured");
       o.owner = u.side;
     }
-    log(s, `${u.label} completes movement.`);
+    log(s, `${u.id} · ${u.label} completes movement.`, "move");
   }
   p.index++;
   p.reacted = false;p.reactors=[];p.progress=0;
@@ -689,7 +696,7 @@ function directFire(s, ids, target, mode = "single", options = {}) {
   beginUnitAction(s,ids);
   for (const f of fs.firers) reveal(s, f);
   s.firefight = { side: s.active, ids: [...ids], target, mode, options, round: 0 };
-  log(s, "Shooting declared. Opponent may react with fire, movement, rally, skill, or pass.");
+  log(s, `${ids.join(", ")} declares fire at ${target}. Opponent may react or let it proceed.`, "fire");
 }
 function resolveFirefight(s, { ids = [], mode = "single", decline = false } = {}) {
   const p = s.firefight;

@@ -2,7 +2,7 @@
 
 ## Automated verification
 
-`npm test`: **136 passing tests across ten files**. This includes core actions, Orders, nested save validation, terrain, integrated rule interactions, all supplied player rulings, narrow-gap geometry, dice-table calculations/meshes/convex rigid bodies, automatic action-pool metadata and AI progression.
+`npm test`: **168 passing tests**. This includes core actions, Orders, nested save validation, terrain, integrated rule interactions, all supplied player rulings, narrow-gap geometry, dice-table calculations/meshes/convex rigid bodies, automatic action-pool metadata and AI progression.
 
 `npm run build`: passes. The native game modules, Three.js tabletop and standalone dice-table bundle are packaged for static hosting. Cannon-es is bundled locally, with its MIT license retained.
 
@@ -10,17 +10,29 @@
 
 | Difficulty | Quality | Decision steps | Game actions | Winner |
 | --- | --- | ---: | ---: | --- |
-| Easy | Irregular D4 | 38 | 17 | Red |
-| Normal | Regular D6 | 76 | 47 | Blue |
-| Hard | Veteran D8 | 49 | 27 | Blue |
-| Hard | Elite D10 | 61 | 32 | Red |
-| Hard | Super D12 | 23 | 11 | Blue |
+| Easy | Irregular D4 | 70 | 38 | Blue |
+| Normal | Regular D6 | 61 | 30 | Blue |
+| Hard | Veteran D8 | 36 | 18 | Red |
+| Hard | Elite D10 | 50 | 29 | Blue |
+| Hard | Super D12 | 48 | 31 | Blue |
 
 Twelve in-campaign Undo/Redo round trips restored identical game state, followed by validated portable save/import. Decision history reached its forty-entry bound without changing seeded outcomes. Results are in [PLAYTHROUGHS.json](PLAYTHROUGHS.json). The elite test exposed an AI pass loop near protected terrain and a charge endpoint that did not account for smaller commander bases. AI close assault/reserve choices and footprint-aware charge contact were fixed and given regression tests. These are bounded seeded playthroughs, not proof that every possible army/map matchup completes.
 
 Geometry tests find open base-edge rays through gaps missed by all former corner/midpoint samples, and sub-millionth movement windows missed by101 fixed time samples. Whole-base exposure is evaluated across the route for fleeting-gap Disadvantage. Floating-point tolerance and explicit computation budgets remain documented in COVERAGE.md.
 
-## Chrome UI checks
+## Current interaction checks
+
+- The player and AI each moved recon markers twice before contact; one finished side no longer ends the other side’s patrol.
+- Enemy battle units advanced toward an uncaptured objective, paused for the player’s reaction, and changed position when the reaction was declined.
+- Canvas paint instrumentation confirmed identical die labels in the final moving frame, settled frame, and result redraw.
+- Game action dice use a transparent battlefield overlay with physical dice entry and cancellation before recording. Desktop and phone layouts were verified without JavaScript errors.
+
+- Native browser fullscreen, in-place Force Forge and embedded rules, action-log search, and fullscreen exit were verified.
+- Action-log drawers can open over an active dice sequence without recreating the dice canvas.
+- Portrait 390×844 and landscape 844×390 play layouts have no horizontal overflow; the log drawer remains inside the viewport.
+- Fullscreen helper tests cover hidden navigation requests, denied requests, optional orientation lock, and native exit; action-log tests cover filtering, escaping, and validated save/reload.
+
+## Earlier Chrome UI checks
 
 - Phone390×844: no horizontal document overflow; map353px wide; game dice dialog374px wide with no dialog overflow.
 - Landscape844×390: no horizontal document or dice-dialog overflow; dialog828px wide. Full-screen battlefield controls were also checked at844×390.
@@ -46,3 +58,9 @@ See [COVERAGE.md](COVERAGE.md), [DICE-ROLLER.md](DICE-ROLLER.md) and [PLAYER-RUL
 - Searchable rules page finds the firing-marker procedure. The Word manual was rendered and all21 pages were inspected for readable text, table continuation, margins, and clipping. Runtime-derived tables include23 weapons,13 armors,13 terrain types, and38 command abilities/traits.
 
 The rules review used local executable code only, without a PDF or external rulebook. Its observed discrepancies are in IMPLEMENTED-RULES.md. Documentation does not silently change those pre-existing mechanics.
+
+Recon independence regression: both factions can move out of friendly marker LOS, including when that friendly marker is already locked. Existing enemy-contact locking tests still pass.
+
+LOS display verification: all nine blocking terrain types reject direct shots in both directions when both stands are outside; smoke blocks as well. Direct firing markers use straight legal rays, and convex/concave terrain clipping keeps visible geometry inside rules footprints. Chrome verified blocking woods, named/highlighted blockers, and rejected declarations in 2D and 3D. An independent rectangle-intersection audit verified 1,706 clear witnesses across 2,500 randomized fields without finding a ray through an intervening blocker. This does not establish that the user’s exact reported saved position has been reproduced.
+
+Firing-effects QA: trajectory tests cover fast straight projectiles, arcing indirect projectiles, brief flash timing, drifting/expanding smoke and complete burst termination. Chrome/WebGL verified the scene-space burst becomes active and finishes without JavaScript errors. Reduced-motion settings suppress animated scene effects.

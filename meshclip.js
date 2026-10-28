@@ -12,3 +12,14 @@ export function clipMeshToTable(geometry,outline){
  }
  const result=new T.BufferGeometry();for(const [k,a]of attrs)result.setAttribute(k,new T.Float32BufferAttribute(out[k],a.itemSize));if(source!==geometry)source.dispose();return result;
 }
+
+// Terrain outlines may be concave. Split those outlines into non-overlapping
+// triangles before clipping, so visible walls/canopies match the rules footprint.
+export function clipMeshToPolygon(geometry,outline){
+ let sign=0,convex=true;
+ for(let i=0;i<outline.length;i++){const a=outline[i],b=outline[(i+1)%outline.length],c=outline[(i+2)%outline.length],cross=(b[0]-a[0])*(c[1]-b[1])-(b[1]-a[1])*(c[0]-b[0]);if(Math.abs(cross)<1e-8)continue;if(sign&&Math.sign(cross)!==sign){convex=false;break;}sign=Math.sign(cross);}
+ if(convex)return clipMeshToTable(geometry,outline);
+ const triangles=T.ShapeUtils.triangulateShape(outline.map(([x,y])=>new T.Vector2(x,y)),[]),attrs=Object.entries(geometry.attributes),out=Object.fromEntries(attrs.map(([name])=>[name,[]]));
+ for(const tri of triangles){const piece=clipMeshToTable(geometry,tri.map(i=>outline[i])),flat=piece.index?piece.toNonIndexed():piece;for(const[name,attr]of Object.entries(flat.attributes))for(const value of attr.array)out[name].push(value);if(flat!==piece)flat.dispose();piece.dispose();}
+ const result=new T.BufferGeometry();for(const[name,attr]of attrs)result.setAttribute(name,new T.Float32BufferAttribute(out[name],attr.itemSize));return result;
+}

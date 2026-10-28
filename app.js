@@ -1,8 +1,10 @@
+import {filterActionLog,renderActionEntries} from './action-log.js';
+import {movementSelection,toggleFriendlySelection} from './selection.js';
 import{GameHistory}from'./history.js';
 import{activeFireEvents,FIRE_MODE_NAMES}from'./fire-events.js';
-import {mountDiceTray} from './dice-tray.bundle.js?v=0.3.0';
+import {mountDiceTray} from './dice-tray.bundle.js?v=0.3.0-battlefield-7';
 import {BOARD_LIST,getCommandBoard,getCommandAbility} from './command-board.js';
-import { mountTabletop } from "./tabletop.bundle.js?v=0.3.0";
+import { mountTabletop } from "./tabletop.bundle.js?v=0.3.0-battlefield-7";
 import * as E from "./engine.js";
 import { VERSION, QUALITIES, TYPES, NATIONS, WEAPONS, ARMOR, PROGRAMS, FEATS, SCENARIOS, RULES_URL } from "./data.js";
 import { armyTemplate, armyTotals, unitValue, encodeArmy, decodeArmy } from "./army.js";
@@ -12,10 +14,10 @@ import { center, dist } from "./geometry.js";
 import * as Store from "./storage.js";
 import * as Maps from "./battlefields.js";
 import { beginDiceAction, advanceDiceAction, recordDice, cancelDiceAction } from "./dice.js";
-import { chooseAction, chooseReaction, applyAI } from "./ai.js";
-import { requestLandscape } from "./playview.js";
+import { chooseAction, chooseReaction, applyAI, chooseReconMove } from "./ai.js";
+import { requestLandscape, exitBrowserFullscreen, isBrowserFullscreen } from "./playview.js";
 const app = document.querySelector("#app"), dialog = document.querySelector("#dialog"), q = (s) => document.querySelector(s);
-let game,loadError=null,diceTray=null;
+let game,loadError=null,diceTray=null,diceOverlay=null,diceObserver=null;
 try {
   game = Store.load();
 } catch(error) {
@@ -23,8 +25,10 @@ try {
 }
 game ||= E.newGame();
 let journal=new GameHistory(game,E.validateSave),historyReview=journal.canRedo;
+const startInPlay=new URLSearchParams(location.search).get('play')==='1'||matchMedia('(display-mode: standalone)').matches||matchMedia('(display-mode: fullscreen)').matches;
+let nativeFullscreen=false,logSide='all',logSearch='';
 let commandSelection = [];
-let selected = [], target = null, mode = "select", tab = "orders", view = "tabletop", pan = false, orbit = false, multi = false, expanded = false, paused = journal.canRedo, camera = null, snapshot = null, toastTimer = null, aiTimer = null, diceRequest = null, context = null, fireMode = "single", fireType = "normal", reactionT = 0.5, mapDraft = null, mapEditor = null, forceSide = 0, forceDrafts = structuredClone(game.options.armies), chosenMap = game.options.battlefield, showShot = true, showZones = false;
+let selected = [], target = null, mode = "select", tab = startInPlay?"":"orders", view = "tabletop", pan = false, orbit = false, multi = false, expanded = startInPlay, paused = journal.canRedo, camera = null, snapshot = null, toastTimer = null, aiTimer = null, diceRequest = null, context = null, fireMode = "single", fireType = "normal", reactionT = 0.5, mapDraft = null, mapEditor = null, forceSide = 0, forceDrafts = structuredClone(game.options.armies), chosenMap = game.options.battlefield, showShot = true, showZones = false;
 try {
   view = localStorage.getItem("kdwarf-view") || "tabletop";
 } catch {
@@ -36,8 +40,11 @@ function toast(text) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => q("#toast").classList.remove("visible"), 4500);
 }
+function destroyDiceTray(){
+  diceTray?.destroy();diceTray=null;diceObserver?.disconnect();diceObserver=null;diceOverlay?.remove();diceOverlay=null;dialog.classList.remove("dice-room-dialog");
+}
 function show(title, html) {
-  diceTray?.destroy();diceTray=null;dialog.classList.remove("dice-room-dialog");
+  destroyDiceTray();
   clearTimeout(aiTimer);
   context = null;
   mapEditor?.destroy();
@@ -56,7 +63,7 @@ function close() {
       return;
     }
   }
-  diceTray?.destroy();diceTray=null;dialog.classList.remove("dice-room-dialog");
+  destroyDiceTray();
   dialog.close();
   scheduleAI();
 }
@@ -95,7 +102,7 @@ function diceAction(action, { orders = false } = {}) {
   }
 }
 function finishAction() {
-  diceTray?.destroy();diceTray=null;dialog.classList.remove("dice-room-dialog");
+  destroyDiceTray();
   dialog.close();
   diceRequest = null;
   selected = selected.filter(get);
@@ -107,10 +114,17 @@ function finishAction() {
   render();
 }
 function showDice(r) {
+ destroyDiceTray();clearTimeout(aiTimer);context=null;
+ if(expanded){tab="";q(".play-drawer")?.remove();const status=q(".play-guidance");if(status)status.textContent="Resolve battlefield dice: "+r.label;}
+ if(dialog.open)dialog.close();
  r={...r,initiativeRule:/Rally|rally|Skill|Recovery/.test(r.label)};
  diceRequest=r;if(r.label.includes('roll-off'))r={...r,kind:'roll-off'};
- show('Dice table · '+sideName(r.side),'<div class="dice-history-controls">'+historyControls()+'</div><div id="dice-room"></div>');dialog.classList.add('dice-room-dialog');
- diceTray=mountDiceTray(q('#dice-room'),{request:r,onRecord:values=>{game=recordDice(game,values);save("Record "+values.length+"D"+r.sides+" dice");},onContinue:()=>{const next=advanceDiceAction(game);game=next.game;save();if(next.done)finishAction();else showDice(next.request);},onExport:()=>Store.download(game),onError:toast});
+ diceOverlay=document.createElement('div');diceOverlay.setAttribute('aria-label','Battlefield dice');
+ const field=q('.map-viewport');q('.map-panel').append(diceOverlay);
+ const sizeDice=()=>{if(!diceOverlay)return;Object.assign(diceOverlay.style,{top:field.offsetTop+'px',left:field.offsetLeft+'px',width:field.clientWidth+'px',height:field.clientHeight+'px'});};
+ diceObserver=new ResizeObserver(sizeDice);diceObserver.observe(field);sizeDice();
+ if(!expanded)field.scrollIntoView({block:'center'});
+ diceTray=mountDiceTray(diceOverlay,{battlefield:true,canCancel:!game.pendingDice.rolls.length,onClose:()=>{game=cancelDiceAction(game);finishAction();},request:r,onRecord:values=>{game=recordDice(game,values);save("Record "+values.length+"D"+r.sides+" dice");},onContinue:()=>{const next=advanceDiceAction(game);game=next.game;save();if(next.done)finishAction();else showDice(next.request);},onExport:()=>Store.download(game),onError:toast});
 }
 function freeDiceTable(resolved=null){
  if(game.pendingDice){const r=advanceDiceAction(game);if(r.done){game=r.game;finishAction();}else showDice(r.request);return;}
@@ -144,18 +158,20 @@ function guidance() {
   if (game.pending) return "Enemy movement can be interrupted. Choose fire, movement, rally, skill, or let it proceed.";
   if (game.firefight) return "Shooting declared. The opponent may react before the firefight resolves.";
   if (game.combat) return "Units are in melee. Roll simultaneous attacks; all opposing units must be resolved.";
-  if (game.phase === "recon") return "Reconnaissance: move a marker, maintain friendly LOS, and lock on enemy contact.";
+  if (game.phase === "recon") return `${sideName(game.recon.turn)} patrol: move an unlocked marker. Sides alternate while both can move; enemy contact locks markers. Deployment starts when all markers are locked.`;
   if (game.phase === "deployment-markers") return "Place deployment markers in cover behind your recon markers.";
   if (game.phase === "deployment") return "Deploy teams on your edge or behind deployment markers. Then begin the operation.";
   return `${sideName(game.active)} initiative · select a team, choose an action, and exploit your successes.`;
 }
 function render() {
+  if(diceOverlay)destroyDiceTray();
   if(journal?.record(game))Store.save(game);
   snapshot = camera?.destroy() || snapshot;
   camera = null;
+  snapshot={...snapshot,expanded};
   document.body.classList.toggle("board-play", expanded);
   const own = game.morale[viewer()], burden = own.cards.reduce((n, c) => n + c.value, 0);
-  app.innerHTML = `<header class="kd-topbar"><a class="kd-wordmark" href="#" data-home><span class="kd-star">✦</span><div>K-DWARF<small>O P E R A T I O N S</small></div></a><div class="kd-status"><i></i>LOCAL COMMAND LINK<span>v${VERSION} ALPHA</span></div><nav>${button("FORCE FORGE", "data-forces")}${button("FIELD MANUAL", 'data-help="scope"')}${button("OPERATIONS", "data-operations")}</nav></header><main class="kd-shell"><section class="kd-brief"><div><p class="eyebrow">TACTICAL OPERATIONS / ${game.phase.replaceAll("-", " ").toUpperCase()}</p><h1>${SCENARIOS[game.scenario].name}</h1><p>Command the descendants of humanity beneath a long-lived star.</p><div class="kd-phase-strip"><span class="${game.phase === "recon" ? "active" : ""}">01 RECON</span><span class="${game.phase.includes("deployment") ? "active" : ""}">02 DEPLOY</span><span class="${game.phase === "battle" ? "active" : ""}">03 ENGAGE</span></div></div><div class="kd-telemetry"><div><small>INITIATIVE</small><strong class="${game.active ? "red" : "blue"}">${sideName(game.active)} <b>${game.initiative || "—"}</b></strong></div><div><small>YOUR FORCE MORALE</small><strong>${burden}<em> / ${own.fmr}</em></strong><div class="meter"><i style="width:${Math.min(100, 100 * burden / own.fmr)}%"></i></div></div><div><small>OBJECTIVES</small><strong>${game.objectives.filter((o) => o.owner === viewer()).length}<em> / ${game.objectives.length || "—"}</em></strong></div></div></section><section class="kd-directive"><span class="pulse"></span><b>${game.winner !== null ? "OPERATION COMPLETE" : "COMMAND GUIDANCE"}</b><p>${esc(guidance())}</p>${help(game.phase === "battle" ? "actions" : "recon")}</section><div class="kd-layout"><section class="map-panel panel ${expanded ? "expanded" : ""}"><div class="panel-head"><div><span class="eyebrow">${view === "tabletop" ? "HOLOGRAPHIC TABLETOP" : "TACTICAL FOOTPRINTS"}</span><h3>${esc(game.options.battlefield.name)}</h3></div><div class="map-tools">${button(view === "tabletop" ? "2D PLAN" : "3D TABLE", "data-view")}${button("FIT", 'data-camera="fit"')}${button("FULL SCREEN", 'data-camera="expand"')}</div></div><div class="map-viewport" tabindex="0" aria-label="K-Dwarf battlefield: tap to select; drag to move or pan"><div class="battle-stage">${view === "tactical" ? renderMap(displayGame(), mapState()) : ""}</div></div>${quickOrders()}<div class="map-footer"><span>4+ SUCCESS · MAXIMUM EXPLODES</span><span>D4 / D6 / D8 / D10 / D12</span>${historyControls()}</div>${expanded ? playHUD() : ""}${context ? contextHTML() : ""}</section>${!expanded ? `<aside class="kd-sidebar"><nav class="kd-desk-tabs">${tabs().map(([id, name]) => button(name, `data-tab="${id}"`, tab === id ? "active" : "")).join("")}</nav>${panel()}</aside>` : ""}</div><section class="kd-bottom"><div><span class="eyebrow">NATHAN CULVER’S</span><h2>Future warfare.<br>Unbroken initiative.</h2><p>Three dice. A 4+ succeeds. Maximum faces explode.<br>Every decision can turn the operation.</p></div><div class="kd-rules-scale">${[4, 6, 8, 10, 12].map((v, i) => `<div><b class="poly-die d${v}">D${v}</b><small>${Object.values(QUALITIES)[i].name}</small></div>`).join("")}</div></section><footer>K-Dwarf: Operations · Nathan Culver · Built on the Crossfire digital tabletop foundation <a href="https://github.com/Nathan-Culver/k-dwarf">SOURCE & RULE COVERAGE ↗</a></footer></main>`;
+  app.innerHTML = `<header class="kd-topbar"><a class="kd-wordmark" href="#" data-home><span class="kd-star">✦</span><div>K-DWARF<small>O P E R A T I O N S</small></div></a><div class="kd-status"><i></i>LOCAL COMMAND LINK<span>v${VERSION} ALPHA</span></div><nav>${button("FORCE FORGE", "data-forces")}${button("FIELD MANUAL", 'data-help="scope"')}${button("OPERATIONS", "data-operations")}</nav></header><main class="kd-shell"><section class="kd-brief"><div><p class="eyebrow">TACTICAL OPERATIONS / ${game.phase.replaceAll("-", " ").toUpperCase()}</p><h1>${SCENARIOS[game.scenario].name}</h1><p>Command the descendants of humanity beneath a long-lived star.</p><div class="kd-phase-strip"><span class="${game.phase === "recon" ? "active" : ""}">01 RECON</span><span class="${game.phase.includes("deployment") ? "active" : ""}">02 DEPLOY</span><span class="${game.phase === "battle" ? "active" : ""}">03 ENGAGE</span></div></div><div class="kd-telemetry"><div><small>INITIATIVE</small><strong class="${game.active ? "red" : "blue"}">${sideName(game.active)} <b>${game.initiative || "—"}</b></strong></div><div><small>YOUR FORCE MORALE</small><strong>${burden}<em> / ${own.fmr}</em></strong><div class="meter"><i style="width:${Math.min(100, 100 * burden / own.fmr)}%"></i></div></div><div><small>OBJECTIVES</small><strong>${game.objectives.filter((o) => o.owner === viewer()).length}<em> / ${game.objectives.length || "—"}</em></strong></div></div></section><section class="kd-directive"><span class="pulse"></span><b>${game.winner !== null ? "OPERATION COMPLETE" : "COMMAND GUIDANCE"}</b><p>${esc(guidance())}</p>${help(game.phase === "battle" ? "actions" : "recon")}</section><div class="kd-layout"><section class="map-panel panel ${expanded ? "expanded" : ""}"><div class="panel-head"><div><span class="eyebrow">${view === "tabletop" ? "HOLOGRAPHIC TABLETOP" : "TACTICAL FOOTPRINTS"}</span><h3>${esc(game.options.battlefield.name)}</h3></div><div class="map-tools">${button(view === "tabletop" ? "2D PLAN" : "3D TABLE", "data-view")}${button("FIT", 'data-camera="fit"')}${button("FULL SCREEN", 'data-camera="expand"')}</div></div><div class="map-viewport" tabindex="0" aria-label="K-Dwarf battlefield: tap to select; drag to move or pan"><div class="battle-stage">${view === "tactical" ? renderMap(displayGame(), mapState()) : ""}</div></div>${expanded?"":quickOrders()}<div class="map-footer"><span>4+ SUCCESS · MAXIMUM EXPLODES</span><span>D4 / D6 / D8 / D10 / D12</span>${historyControls()}</div>${expanded ? playHUD() : ""}${context ? contextHTML() : ""}</section>${!expanded ? `<aside class="kd-sidebar"><nav class="kd-desk-tabs">${tabs().map(([id, name]) => button(name, `data-tab="${id}"`, tab === id ? "active" : "")).join("")}</nav>${panel()}</aside>` : ""}</div><section class="kd-bottom"><div><span class="eyebrow">NATHAN CULVER’S</span><h2>Future warfare.<br>Unbroken initiative.</h2><p>Three dice. A 4+ succeeds. Maximum faces explode.<br>Every decision can turn the operation.</p></div><div class="kd-rules-scale">${[4, 6, 8, 10, 12].map((v, i) => `<div><b class="poly-die d${v}">D${v}</b><small>${Object.values(QUALITIES)[i].name}</small></div>`).join("")}</div></section><footer>K-Dwarf: Operations · Nathan Culver · Built on the Crossfire digital tabletop foundation <a href="https://github.com/Nathan-Culver/k-dwarf">SOURCE & RULE COVERAGE ↗</a></footer></main>`;
   const opts = { game: displayGame(), state: mapState(), snapshot, onSelect: selectUnit, onPoint: selectPoint, onContext: (id, p) => {
     context = { id, x: Math.max(8, Math.min(innerWidth - 240, p.x)), y: Math.max(56, Math.min(innerHeight - 300, p.y)) };
     render();
@@ -177,7 +193,7 @@ function render() {
     }
   }
   scheduleAI();
-  if (game.pendingDice && !dialog.open && !historyReview) {
+  if (game.pendingDice && !dialog.open && !diceOverlay && !historyReview) {
     try {
       const r = advanceDiceAction(game);
       game = r.game;
@@ -191,12 +207,18 @@ function render() {
 function mapState() {
   return { selected, target, mode, viewer: viewer(), los: mode === "los", reactionT, showShot, showZones, fireMode, fireIds: selectedUnits().filter(E.canShoot).map((u) => u.id) };
 }
-const tabs = () => [["orders", game.pending || game.firefight ? "REACTION" : "ORDERS"], ["roster", "FORCE"], ["command", "COMMAND"], ["morale", "MORALE"], ["log", "DISPATCH"], ["camera", "CAMERA"]];
+const tabs = () => [["orders", game.pending || game.firefight ? "REACTION" : "ORDERS"], ["roster", "FORCE"], ["command", "COMMAND"], ["morale", "MORALE"], ["log", "LOG"], ["camera", "CAMERA"]];
 function panel() {
   return tab === "roster" ? roster() : tab === "command" ? commandPanel() : tab === "morale" ? moralePanel() : tab === "log" ? logPanel() : tab === "camera" ? cameraPanel() : ordersPanel();
 }
 function playHUD() {
-  return `<div class="play-hud"><div class="play-top"><div class="play-turn"><b>${sideName(game.active)} / INIT ${game.initiative || "—"}</b><small>K-DWARF OPERATIONS</small></div><div class="play-tabs" role="tablist" aria-label="Table controls">${tabs().map(([id, name]) => `<button role="tab" aria-selected="${tab === id}" data-tab="${tab === id ? "" : id}">${name}</button>`).join("")}${button("OPS", "data-operations")}</div>${button("EXIT", 'data-camera="expand"')}</div>${tab ? `<section class="play-drawer" role="tabpanel" aria-label="${tab}">${button("×", 'data-tab="" aria-label="Close table menu"', "play-drawer-close")}${panel()}</section>` : ""}<div class="play-history">${historyControls()}</div><div class="play-bottom"><span>${selected.length ? `${selected.length} selected · ${selected[0]}` : "SELECT A TEAM. RETAIN THE INITIATIVE."}</span>${button(multi ? "MULTI ✓" : "MULTI", "data-multi")}${button("MOVE", 'data-camera-mode="move"', !pan && !orbit ? "primary" : "")}${button("PAN", 'data-camera-mode="pan"', pan ? "primary" : "")}${view === "tabletop" ? button("ORBIT", 'data-camera-mode="orbit"', orbit ? "primary" : "") : ""}${button("FIT", 'data-camera="fit"')}</div></div>`;
+  const canPass=game.phase==='battle'&&game.winner===null&&human(actor())&&!game.pendingDice&&!game.pending&&!game.firefight&&!game.programPending&&!game.orderWindow&&!game.events.length&&!game.smokeChoice&&!game.combat&&!game.routQueue?.length&&!game.deferredAction;
+  return `<div class="play-hud"><div class="play-top"><div class="play-turn"><b>${sideName(game.active)} / INIT ${game.initiative || "—"}</b><small>K-DWARF OPERATIONS</small></div><div class="play-tabs" role="tablist" aria-label="Table controls">${tabs().map(([id,name])=>`<button role="tab" aria-selected="${tab===id}" data-play-tab="${id}" data-tab="${tab===id?'':id}">${name}</button>`).join('')}</div>${button('OPS','data-operations')}${!isBrowserFullscreen()&&!matchMedia('(display-mode: standalone)').matches&&!matchMedia('(display-mode: fullscreen)').matches?button('HIDE BROWSER UI','data-landscape'):''}${button('EXIT','data-camera="expand" aria-label="Exit full-screen play"','play-exit')}</div><p class="play-guidance" role="status">${esc(guidance())}</p>${tab?`<section class="play-drawer" role="tabpanel" aria-label="${tab}">${button('×','data-tab="" aria-label="Close table menu"','play-drawer-close')}${panel()}</section>`:''}<div class="play-left-stack"><div class="play-history">${historyControls()}</div>${!game.pendingDice?`<section class="play-recent-log" aria-label="Recent actions"><button data-tab="log">ACTION LOG · VIEW ALL</button>${renderActionEntries(game.log.slice(-2).reverse(),{compact:true})}</section>`:''}${quickOrders()}</div><div class="play-bottom"><span>${selected.length?`${selected.length} selected · ${esc(selected[0])}`:'SELECT A TEAM'}</span>${canPass?button('PASS INITIATIVE','data-pass'):''}${(game.pending||game.firefight)&&human(actor())?button('LET ACTION PROCEED','data-decline','primary'):''}${button(multi?'MULTI ✓':'MULTI','data-multi')}${button('MOVE','data-camera-mode="move"',!pan&&!orbit?'primary':'')}${button('PAN','data-camera-mode="pan"',pan?'primary':'')}${view==='tabletop'?button('ORBIT','data-camera-mode="orbit"',orbit?'primary':''):''}${button('FIT','data-camera="fit"')}</div></div>`;
+}
+function refreshPlayDrawer(){
+ q('.play-drawer')?.remove();
+ if(tab)q('.play-hud')?.insertAdjacentHTML('beforeend',`<section class="play-drawer" role="tabpanel" aria-label="${tab}">${button('×','data-tab="" aria-label="Close table menu"','play-drawer-close')}${panel()}</section>`);
+ for(const el of document.querySelectorAll('[data-play-tab]')){el.setAttribute('aria-selected',String(tab===el.dataset.playTab));el.dataset.tab=tab===el.dataset.playTab?'':el.dataset.playTab;}
 }
 function quickOrders() {
   if (game.phase !== "battle" || !selectedUnits()[0] || game.pending || game.firefight || game.programPending || game.orderWindow || game.events.length || game.smokeChoice || game.combat) return "";
@@ -239,7 +261,7 @@ function ordersPanel() {
 }
 function phasePanel() {
   const phase = game.phase;
-  return `<section class="command-body"><span class="eyebrow">PRE-BATTLE SEQUENCE</span><h3>${phase.toUpperCase().replaceAll("-", " ")}</h3><p>${esc(guidance())}</p>${phase === "recon" && game.recon.supremacy === null ? `<label>Blue morale wager<input id="bid-blue" type="number" value="0" min="0" max="20"></label><label>Red morale wager<input id="bid-red" type="number" value="0" min="0" max="20"></label>${button("RESOLVE SUPREMACY", "data-bid", "primary wide")}` : phase === "recon" ? `<p>${sideName(game.recon.turn)} moves. Select a marker, then tap its endpoint.</p>${game.recon.markers.map((m) => button(`${sideName(m.side)} ${m.id}${m.locked ? " / LOCKED" : ""}`, `data-select="${m.id}"`)).join("")}${target ? button("MOVE MARKER", "data-recon-move", "primary wide") + button("MOVE & LOCK", "data-recon-lock", "wide") : ""}${button("LOCK REMAINING MARKERS", "data-recon-finish", "wide")}` : phase === "deployment-markers" ? `<p>${sideName(game.recon.turn)} places its next marker. Choose cover behind a friendly recon marker.</p>${target ? button("PLACE DEPLOYMENT MARKER", "data-deployment-marker", "primary wide") : ""}${button("AUTOMATE LEGAL MARKER PLACEMENT", "data-auto-markers", "wide")}` : `<p>${sideName(game.active)} deployment. Drag teams, or arrange legal edge positions.</p>${button("AUTO-ARRANGE ON EDGES", "data-auto-deploy", "wide")}${button("ARRANGE OTHER SIDE", "data-deploy-side", "wide")}${button("BEGIN OPERATION", "data-begin", "primary wide")}`}<div class="divider"></div>${button("FORCE FORGE", "data-forces", "wide")}${button("BATTLEFIELD BUILDER", "data-maps", "wide")}${button("NEW OPERATION", "data-new", "wide")}${help("recon")}</section>`;
+  return `<section class="command-body"><span class="eyebrow">PRE-BATTLE SEQUENCE</span><h3>${phase.toUpperCase().replaceAll("-", " ")}</h3><p>${esc(guidance())}</p>${phase === "recon" && game.recon.supremacy === null ? `<label>Blue morale wager<input id="bid-blue" type="number" value="0" min="0" max="20"></label><label>Red morale wager<input id="bid-red" type="number" value="0" min="0" max="20"></label>${button("RESOLVE SUPREMACY", "data-bid", "primary wide")}` : phase === "recon" ? `<p>${sideName(game.recon.turn)} moves. Select a marker, then tap its endpoint.</p>${game.recon.markers.map((m) => button(`${sideName(m.side)} ${m.id}${m.locked ? " / LOCKED" : ""}`, `data-select="${m.id}"`)).join("")}${target ? button("MOVE MARKER", "data-recon-move", "primary wide") + button("MOVE & LOCK", "data-recon-lock", "wide") : ""}${button("LOCK MY REMAINING MARKERS", "data-recon-finish", "wide")}` : phase === "deployment-markers" ? `<p>${sideName(game.recon.turn)} places its next marker. Choose cover behind a friendly recon marker.</p>${target ? button("PLACE DEPLOYMENT MARKER", "data-deployment-marker", "primary wide") : ""}${button("AUTOMATE LEGAL MARKER PLACEMENT", "data-auto-markers", "wide")}` : `<p>${sideName(game.active)} deployment. Drag teams, or arrange legal edge positions.</p>${button("AUTO-ARRANGE ON EDGES", "data-auto-deploy", "wide")}${button("ARRANGE OTHER SIDE", "data-deploy-side", "wide")}${button("BEGIN OPERATION", "data-begin", "primary wide")}`}<div class="divider"></div>${button("FORCE FORGE", "data-forces", "wide")}${button("BATTLEFIELD BUILDER", "data-maps", "wide")}${button("NEW OPERATION", "data-new", "wide")}${help("recon")}</section>`;
 }
 function targetInfo(u) {
   const t = target.unitId ? get(target.unitId) : null;
@@ -271,7 +293,7 @@ function moralePanel() {
 }
 function logPanel() {
   const r = game.lastRoll;
-  return `<section class="command-body"><h3>DICE TELEMETRY</h3>${r ? `<p>${esc(r.text)}</p><div class="dice">${r.kept.map((v) => `<span class="die poly-die d${r.sides} ${v + (r.modifier || 0) >= 4 ? "hit" : ""}">${v}</span>`).join("")}</div>${r.discarded?.length ? `<p>Discarded: ${r.discarded.join(", ")}</p>` : ""}${r.explosions?.length ? `<p>Explosion batches: ${r.explosions.map((d) => d.join(", ")).join(" → ")}</p>` : ""}` : "<p>No action dice rolled.</p>"}${r?button("VIEW LAST ROLL IN 3D TRAY","data-dice-last","wide"):""}<h3>ACTIVE FIRING MARKERS</h3><p>Each line remains until its firer or target next takes an action. Recon fire marks its area and revealed contacts without damage.</p>${activeFireEvents(game,viewer()).map(e=>`<div class="active-fire-entry"><b>${esc(FIRE_MODE_NAMES[e.mode])}</b><p>${esc(e.firerId)} → ${esc(e.targetId||e.featureId)}<br>${esc(e.result)}</p>${button('FIRER',`data-select="${e.firerId}"`)}${e.targetId?button('TARGET',`data-select="${e.targetId}"`):''}</div>`).join('')||'<p>No active firing markers.</p>'}<h3>OPERATIONS DISPATCH</h3>${game.log.slice(-35).reverse().map((l) => `<div class="log-entry"><small>INIT ${l.initiative} / ACTION ${l.n}</small>${esc(l.text)}</div>`).join("")}</section>`;
+  return `<section class="command-body"><h3>ACTION LOG</h3><p class="roll-copy">Latest first · ${game.log.length} retained entries · saved with your game</p><label>Search actions<input type="search" data-log-search value="${esc(logSearch)}" placeholder="Unit, result, or action"></label><label>Side<select data-log-side><option value="all" ${logSide==='all'?'selected':''}>Both sides</option><option value="0" ${logSide==='0'?'selected':''}>Blue</option><option value="1" ${logSide==='1'?'selected':''}>Red</option></select></label><div class="action-log-list">${renderActionEntries(filterActionLog(game.log,{side:logSide,query:logSearch}))}</div><details><summary>Dice telemetry &amp; firing history</summary><h3>DICE TELEMETRY</h3>${r ? `<p>${esc(r.text)}</p><div class="dice">${r.kept.map((v) => `<span class="die poly-die d${r.sides} ${v + (r.modifier || 0) >= 4 ? "hit" : ""}">${v}</span>`).join("")}</div>${r.discarded?.length ? `<p>Discarded: ${r.discarded.join(", ")}</p>` : ""}${r.explosions?.length ? `<p>Explosion batches: ${r.explosions.map((d) => d.join(", ")).join(" → ")}</p>` : ""}` : "<p>No action dice rolled.</p>"}${r?button("VIEW LAST ROLL IN 3D TRAY","data-dice-last","wide"):""}<h3>ACTIVE FIRING MARKERS</h3><p>Each line remains until its firer or target next takes an action. Recon fire marks its area and revealed contacts without damage.</p>${activeFireEvents(game,viewer()).map(e=>`<div class="active-fire-entry"><b>${esc(FIRE_MODE_NAMES[e.mode])}</b><p>${esc(e.firerId)} → ${esc(e.targetId||e.featureId)}<br>${esc(e.result)}</p>${button('FIRER',`data-select="${e.firerId}"`)}${e.targetId?button('TARGET',`data-select="${e.targetId}"`):''}</div>`).join('')||'<p>No active firing markers.</p>'}</details></section>`;
 }
 function cameraPanel() {
   const c = snapshot || {};
@@ -307,7 +329,7 @@ function selectUnit(id, mods = {}) {
     render();
     return;
   }
-  if ((mods.shiftKey || multi) && u.side === viewer()) selected = selected.includes(id) ? selected.filter((v) => v !== id) : [...selected, id];
+  if ((mods.shiftKey || multi) && u.side === viewer()) selected = toggleFriendlySelection(game, selected, id, viewer());
   else selected = [id];
   target = null;
   if (selected.length > 1 && fireMode === "single") fireMode = "group";
@@ -331,10 +353,10 @@ function dragPermission(id) {
   if (!u) return "Choose a unit.";
   if (game.phase === "deployment") return u.side === game.active ? null : "Arrange the selected deployment side.";
   if (game.phase !== "battle" || game.pending || game.firefight || game.programPending || game.orderWindow || game.events.length || game.combat || game.routQueue?.length || u.side !== game.active) return "Resolve the current decision first.";
-  return E.canMove(game, u, u);
+  return E.movementStartError(u);
 }
 function dropPlan(id, p) {
-  const u = get(id), ids = selected.includes(id) ? selected : [id], leader = get(ids[0]);
+  const u = get(id), ids = movementSelection(game, selected, id), leader = get(ids[0]);
   return { ids, to: { x: leader.x + p.x - u.x, y: leader.y + p.y - u.y } };
 }
 function dropReason(id, p) {
@@ -460,7 +482,7 @@ function mapsDialog() {
     mapDraft = m;
   } });
 }
-const MANUAL = { scope: ["K-Dwarf field manual", "This adaptation uses Nathan Culver’s K-Dwarf draft plus the latest polyhedral-dice instructions. Main text wins over duplicated Resources material. Base-edge LOS ignores unit blocking. Withdrawals may be fired on after leaving their original cover. Three kept action dice use D4/D6/D8/D10/D12 by quality, 4+ succeeds, and retained maximums explode. Shooting and melee use 0 no effect, 1 Pin, 2 Suppress, 3 Rout, 4+ Destroy. The first implementation includes continuous movement and reaction windows, recon/deployment markers, morale, force lists, specialist actions, armor and weapon profiles, command responses, saves and solo AI. See repository coverage for incomplete or ambiguous draft rules; it is not a claim that every supplement or unfinished draft paragraph is complete."], dice: ["Polyhedral dice", "Irregular D4, Regular D6, Veteran D8, Elite D10, Super D12. Standard pool: three dice. Each 4+ is one success. Cancel Advantage/Disadvantage one-for-one, roll extra dice, discard the appropriate lowest/highest extra dice, then explode each retained maximum; explosion dice may explode again. Destruction requires at least four successes, so an explosion is necessary. Source weapon dice are normalized from the draft’s four-die standard; weapon profiles above that standard grant Advantage rather than extra kept dice."], actions: ["Initiative", "Success lets your side continue. Shooting, rally and skill need two successes to retain initiative; a one-success result can still achieve an effect while passing initiative. Resolve pending reactions, routs, special cards and command responses before another ordinary action. Use FORCE to select a stand and ORDERS to choose its next action."], recon: ["Reconnaissance & deployment", "Recon teams provide recon markers. Resolve supremacy (bid morale cards for ties), alternate moving recon markers in a straight line, preserve friendly LOS chains, and lock on enemy contact. Then place deployment markers in cover behind recon positions, or at your table edge. Alternate deployment. Recon may also deploy behind recon markers. Reserves are limited and enter by Skill after the opening initiative. Automated marker placement and edge deployment perform the same steps."], move: ["Movement", "Drag a ready stand for a live route, or choose MOVE and tap an endpoint. Stop in the first new terrain feature entered. Pinned, Suppressed and prone stands must rally or stand first. Shift-click or MULTI selects a group; group endpoints must form an unbroken LOS chain. Move each declared member through its reaction window before initiative changes."], fire: ["Shooting", "Select a friendly stand, then an enemy. Fire modes are Single, Group and Command Fire. Farther eligible targets and shots outside the normal firing arc incur Disadvantage rather than being forbidden. Cover, prone, armor facing and weapon keywords modify the pool. A 4+ succeeds; 1 Pin, 2 Suppress, 3 Rout, 4+ Destroy. A second Suppression does not automatically destroy in K-Dwarf."], reaction: ["Re-actions", "When an enemy moves or declares shooting, you may react with fire, movement, rally or a skill. Movement reactive fire chooses an exact point on the declared route. Failed reactive fire gives NO FIRE for the initiative. A shooting reaction forms a simultaneous firefight until a side is suppressed or worse; compare the highest success pools for contested initiative."], rally: ["Rally", "Three quality dice, 4+, with eligible commander Advantage. No successes changes nothing, loses initiative and draws morale. One success reduces Suppressed to Pinned or clears Pinned, and loses initiative. Two or more clear Pin/Suppression and retain initiative. Androids, drones and Breakdown require specialist recovery."], rout: ["Rout & surrender", "Three attack successes rout. Resolve compulsory movement toward rear cover, then an immediate rally that does not clear Suppression. A failed compulsory rally sends the unit to reserve; it needs a successful rally before redeployment. A routed unit hit by Pin or worse while moving surrenders. Androids and drones cannot rout."], melee: ["Melee", "Infantry charges into contact and may be interrupted by defensive reactions. Units in a structure fight its occupants. Both sides roll every participating stand before damage is applied. Choose one opposing participant per stand. The latest five result bands replace the old draft melee casualty table. Survivors remain engaged until opposing units are resolved."], smoke: ["Smoke", "Select a smoke-capable weapon, observer or commander and a visible map point. Do not intentionally target friendly units. 0: opponent places Small smoke within LOS of original target and firer, initiative lost; 1: Small smoke on target, initiative lost; both expire at the start of your next initiative; 2: Small until your next initiative; 3: Large until next initiative; 4+: Large until your next initiative. Short-lived failed/one-success smoke remains through the opponent’s following initiative so it can affect play. Smoke blocks LOS and gives no cover dice benefit."], skills: ["Specialists", "Specialists gain one Advantage for skills. Try Again resolves the same Skill and target twice in sequence. Medic/engineer/hacker recovery applies both pools in sequence: two one-success pools clear Suppressed through Pinned to Ready. Medics and engineers recover adjacent eligible teams; hackers use modules and programs. Engineers place/clear hazards and demolish structures. Observers/commanders call batteries. Special operators can discover, camouflage and combat drop. The skill dialog exposes eligible action and target fields. The draft contains unresolved exceptions: the coverage document records boundaries."], orders: ["Command board", "Each deployed troop and commander contributes one quality die: D4/D6/D8/D10/D12. Every 4+ is available; failures are spent and natural maximums explode. Select successes to ARM an ability at its individual draft price. An empty bowl can refill; armed or committed dice block refill. You may discard one chosen die at the start of your initiative. Faction traits cost one success, require activation, and last only while committed. Release spends their dice. When an action is declared, either side may activate armed Orders and respond. Both pass; resolve last-in-first-out, then the action. Four Athenian Orders are Basic and repeatable; the nine pictured Advanced Orders are once per initiative. Unspent assigned dice remain on the board."], morale: ["Force morale", "Initial FMR is the sum of the force’s printed modifiers. Draw secret numeric cards for casualties, failed rallies, automatic rally and lost objectives. Strategic defeat occurs only when the sum exceeds FMR. Special cards cause aircraft, mines, heroism, confusion, ammunition loss or breakdown. Card text controls effects; your draft’s deck counts conflict with its artwork, so the text deck uses exactly two copies of each of six specials, per your ruling."], forge: ["Force creation", "Build 3–4 basic teams per platoon with up to two attachments. PCs and eligible company/battalion commanders are generated automatically. Choose five qualities, 23 weapon profiles, 13 armor profiles, specialist upgrades, reserve positions, transport and armor facings. Vehicle/heavy crews are added separately. Per-weapon targeting and all source cost ambiguities are recorded in the repository."], los: ["Line of sight", "LOS runs between base edges, and neither friendly nor enemy bases block it. Intervening blocking terrain and smoke do. Occupied structures use their center as specified by the structure rules. Decorative trees and miniatures do not replace the 2D terrain geometry. Any open base-edge ray establishes LOS. Moving targets only partly visible through a narrow gap impose one additional Disadvantage. Visibility uses continuous geometric event partitions with floating-point tolerance; complex unresolved geometry is reported for adjudication."], retreat: ["Withdrawal", "Start wholly inside terrain, move rearward in a straight line. Reactive fire is prohibited inside the starting feature, then allowed after exiting, per your choice. Androids and vehicles cannot withdraw."], assault: ["Melee approach", "Select MELEE and then an enemy miniature to declare a charge into base contact. Defensive reactions occur on approach. A pinned charger stops and does not join. Once contact is established, resolve the simultaneous melee."] };
+const MANUAL = { scope: ["K-Dwarf field manual", "This adaptation uses Nathan Culver’s K-Dwarf draft plus the latest polyhedral-dice instructions. Main text wins over duplicated Resources material. Base-edge LOS ignores unit blocking. Withdrawals may be fired on after leaving their original cover. Three kept action dice use D4/D6/D8/D10/D12 by quality, 4+ succeeds, and retained maximums explode. Shooting and melee use 0 no effect, 1 Pin, 2 Suppress, 3 Rout, 4+ Destroy. The first implementation includes continuous movement and reaction windows, recon/deployment markers, morale, force lists, specialist actions, armor and weapon profiles, command responses, saves and solo AI. See repository coverage for incomplete or ambiguous draft rules; it is not a claim that every supplement or unfinished draft paragraph is complete."], dice: ["Polyhedral dice", "Irregular D4, Regular D6, Veteran D8, Elite D10, Super D12. Standard pool: three dice. Each 4+ is one success. Cancel Advantage/Disadvantage one-for-one, roll extra dice, discard the appropriate lowest/highest extra dice, then explode each retained maximum; explosion dice may explode again. Destruction requires at least four successes, so an explosion is necessary. Source weapon dice are normalized from the draft’s four-die standard; weapon profiles above that standard grant Advantage rather than extra kept dice."], actions: ["Initiative", "Success lets your side continue. Shooting, rally and skill need two successes to retain initiative; a one-success result can still achieve an effect while passing initiative. Resolve pending reactions, routs, special cards and command responses before another ordinary action. Use FORCE to select a stand and ORDERS to choose its next action."], recon: ["Reconnaissance & deployment", "Recon teams provide recon markers. Resolve supremacy (bid morale cards for ties), alternate moving recon markers independently in a straight line, and lock on enemy contact. Friendly recon markers do not need line of sight to each other. Then place deployment markers in cover behind recon positions, or at your table edge. Alternate deployment. Recon may also deploy behind recon markers. Reserves are limited and enter by Skill after the opening initiative. Automated marker placement and edge deployment perform the same steps."], move: ["Movement", "Drag a ready stand for a live route, or choose MOVE and tap an endpoint. Stop in the first new terrain feature entered. Pinned, Suppressed and prone stands must rally or stand first. Shift-click or MULTI selects a group; group endpoints must form an unbroken LOS chain. Move each declared member through its reaction window before initiative changes."], fire: ["Shooting", "Select a friendly stand, then an enemy. Fire modes are Single, Group and Command Fire. Farther eligible targets and shots outside the normal firing arc incur Disadvantage rather than being forbidden. Cover, prone, armor facing and weapon keywords modify the pool. A 4+ succeeds; 1 Pin, 2 Suppress, 3 Rout, 4+ Destroy. A second Suppression does not automatically destroy in K-Dwarf."], reaction: ["Re-actions", "When an enemy moves or declares shooting, you may react with fire, movement, rally or a skill. Movement reactive fire chooses an exact point on the declared route. Failed reactive fire gives NO FIRE for the initiative. A shooting reaction forms a simultaneous firefight until a side is suppressed or worse; compare the highest success pools for contested initiative."], rally: ["Rally", "Three quality dice, 4+, with eligible commander Advantage. No successes changes nothing, loses initiative and draws morale. One success reduces Suppressed to Pinned or clears Pinned, and loses initiative. Two or more clear Pin/Suppression and retain initiative. Androids, drones and Breakdown require specialist recovery."], rout: ["Rout & surrender", "Three attack successes rout. Resolve compulsory movement toward rear cover, then an immediate rally that does not clear Suppression. A failed compulsory rally sends the unit to reserve; it needs a successful rally before redeployment. A routed unit hit by Pin or worse while moving surrenders. Androids and drones cannot rout."], melee: ["Melee", "Infantry charges into contact and may be interrupted by defensive reactions. Units in a structure fight its occupants. Both sides roll every participating stand before damage is applied. Choose one opposing participant per stand. The latest five result bands replace the old draft melee casualty table. Survivors remain engaged until opposing units are resolved."], smoke: ["Smoke", "Select a smoke-capable weapon, observer or commander and a visible map point. Do not intentionally target friendly units. 0: opponent places Small smoke within LOS of original target and firer, initiative lost; 1: Small smoke on target, initiative lost; both expire at the start of your next initiative; 2: Small until your next initiative; 3: Large until next initiative; 4+: Large until your next initiative. Short-lived failed/one-success smoke remains through the opponent’s following initiative so it can affect play. Smoke blocks LOS and gives no cover dice benefit."], skills: ["Specialists", "Specialists gain one Advantage for skills. Try Again resolves the same Skill and target twice in sequence. Medic/engineer/hacker recovery applies both pools in sequence: two one-success pools clear Suppressed through Pinned to Ready. Medics and engineers recover adjacent eligible teams; hackers use modules and programs. Engineers place/clear hazards and demolish structures. Observers/commanders call batteries. Special operators can discover, camouflage and combat drop. The skill dialog exposes eligible action and target fields. The draft contains unresolved exceptions: the coverage document records boundaries."], orders: ["Command board", "Each deployed troop and commander contributes one quality die: D4/D6/D8/D10/D12. Every 4+ is available; failures are spent and natural maximums explode. Select successes to ARM an ability at its individual draft price. An empty bowl can refill; armed or committed dice block refill. You may discard one chosen die at the start of your initiative. Faction traits cost one success, require activation, and last only while committed. Release spends their dice. When an action is declared, either side may activate armed Orders and respond. Both pass; resolve last-in-first-out, then the action. Four Athenian Orders are Basic and repeatable; the nine pictured Advanced Orders are once per initiative. Unspent assigned dice remain on the board."], morale: ["Force morale", "Initial FMR is the sum of the force’s printed modifiers. Draw secret numeric cards for casualties, failed rallies, automatic rally and lost objectives. Strategic defeat occurs only when the sum exceeds FMR. Special cards cause aircraft, mines, heroism, confusion, ammunition loss or breakdown. Card text controls effects; your draft’s deck counts conflict with its artwork, so the text deck uses exactly two copies of each of six specials, per your ruling."], forge: ["Force creation", "Build 3–4 basic teams per platoon with up to two attachments. PCs and eligible company/battalion commanders are generated automatically. Choose five qualities, 23 weapon profiles, 13 armor profiles, specialist upgrades, reserve positions, transport and armor facings. Vehicle/heavy crews are added separately. Per-weapon targeting and all source cost ambiguities are recorded in the repository."], los: ["Line of sight", "LOS runs between base edges, and neither friendly nor enemy bases block it. Intervening blocking terrain and smoke do. Occupied structures use their center as specified by the structure rules. Decorative trees and miniatures do not replace the 2D terrain geometry. Any open base-edge ray establishes LOS. Moving targets only partly visible through a narrow gap impose one additional Disadvantage. Visibility uses continuous geometric event partitions with floating-point tolerance; complex unresolved geometry is reported for adjudication."], retreat: ["Withdrawal", "Start wholly inside terrain, move rearward in a straight line. Reactive fire is prohibited inside the starting feature, then allowed after exiting, per your choice. Androids and vehicles cannot withdraw."], assault: ["Melee approach", "Select MELEE and then an enemy miniature to declare a charge into base contact. Defensive reactions occur on approach. A pinned charger stops and does not join. Once contact is established, resolve the simultaneous melee."] };
 function helpDialog(key) {
   const h = MANUAL[key] || MANUAL.actions;
   show(h[0], `<p>${esc(h[1])}</p><details><summary>All field-manual topics</summary>${Object.entries(MANUAL).map(([k, h2]) => button(h2[0], `data-help="${k}"`, "wide")).join("")}</details><p><a href="${RULES_URL}" target="_blank" rel="noreferrer">Open Nathan’s design document ↗</a></p><p><a href="https://github.com/Nathan-Culver/k-dwarf/blob/main/docs/COVERAGE.md" target="_blank" rel="noreferrer">Implementation coverage and rule decisions ↗</a></p>`);
@@ -498,24 +520,13 @@ function scheduleAI() {
   aiTimer = setTimeout(aiStep, 650);
 }
 function aiStep() {
-  if (dialog.open || game.pendingDice || game.winner !== null || game.options.mode !== "solo") return;
+  if (paused || actor() !== 1 || dialog.open || game.pendingDice || game.winner !== null || game.options.mode !== "solo") return;
   const before = structuredClone(game);
   try {
     if (game.phase === "recon") {
-      const m = game.recon.markers.find((m2) => m2.side === 1 && !m2.locked);
-      if (!m) {
-        E.finishRecon(game);
-      } else {
-        const targets = game.terrain.map(center).filter((p) => p.x < m.x).sort((a, b) => dist(m, a) - dist(m, b));
-        let done = false;
-        for (const p of targets) try {
-          E.moveRecon(game, m.id, p, true);
-          done = true;
-          break;
-        } catch {
-        }
-        if (!done) E.finishRecon(game);
-      }
+      const move = chooseReconMove(game);
+      if (move) E.moveRecon(game, move.id, move.to);
+      else E.finishRecon(game);
     } else if (game.phase === "deployment-markers") {
       const side = game.recon.turn, m = game.recon.markers.find((m2) => m2.side === side) || { x: boardOf(game).width, y: boardOf(game).height / 2 }, points = game.terrain.map(center).filter((p) => p.x >= m.x).sort((a, b) => dist(a, m) - dist(b, m));
       let placed = false;
@@ -562,6 +573,33 @@ function aiStep() {
     render();
   }
 }
+function setPlayMode(value){
+ snapshot=camera?.destroy()||snapshot;camera=null;expanded=value;snapshot={...snapshot,expanded:value};context=null;if(value)tab='';render();
+}
+async function enterPlayMode(){
+ const request=requestLandscape();if(!expanded)setPlayMode(true);
+ const result=await request;
+ if(result.fullscreen)q('.play-top [data-landscape]')?.remove();
+ if(!result.fullscreen&&!matchMedia('(display-mode: standalone)').matches&&!matchMedia('(display-mode: fullscreen)').matches)toast('This browser did not enter native fullscreen. Use its full-screen command or install the game to hide browser controls.');
+}
+document.addEventListener('click',e=>{
+ if(e.target.closest('[data-camera="expand"]')){
+  e.preventDefault();e.stopImmediatePropagation();
+  if(expanded){setPlayMode(false);exitBrowserFullscreen();}else enterPlayMode();
+ }
+},true);
+for(const event of ['fullscreenchange','webkitfullscreenchange'])document.addEventListener(event,()=>{
+ if(isBrowserFullscreen())nativeFullscreen=true;
+ else if(nativeFullscreen){nativeFullscreen=false;if(expanded)setPlayMode(false);}
+});
+document.addEventListener('input',e=>{
+ if(!e.target.matches('[data-log-search]'))return;
+ logSearch=e.target.value;const list=q('.action-log-list');if(list)list.innerHTML=renderActionEntries(filterActionLog(game.log,{side:logSide,query:logSearch}));
+});
+document.addEventListener('change',e=>{
+ if(!e.target.matches('[data-log-side]'))return;
+ logSide=e.target.value;const list=q('.action-log-list');if(list)list.innerHTML=renderActionEntries(filterActionLog(game.log,{side:logSide,query:logSearch}));
+});
 document.addEventListener("click", (e) => {
   const el = e.target.closest("button,a[data-home]");
   if (!el) return;
@@ -573,7 +611,7 @@ document.addEventListener("click", (e) => {
     close();
     return;
   }
-  if(d.implementedRules!==undefined){window.open('./rules.html','_blank','noopener');return;}
+  if(d.implementedRules!==undefined){show('Implemented rules','<iframe class="play-rules" src="./rules.html" title="Implemented game rules"></iframe>');return;}
   if (d.help) {
     helpDialog(d.help);
     return;
@@ -631,7 +669,7 @@ document.addEventListener("click", (e) => {
   if (d.tab !== void 0) {
     tab = d.tab;
     context = null;
-    render();
+    if(expanded)refreshPlayDrawer();else render();
     return;
   }
   if (d.view !== void 0) {
@@ -656,7 +694,7 @@ document.addEventListener("click", (e) => {
     return;
   }
   if (d.landscape !== void 0) {
-    requestLandscape();
+    enterPlayMode();
     return;
   }
   if (d.shots !== void 0) {
@@ -1075,7 +1113,7 @@ dialog.addEventListener("cancel", (e) => {
     close();
   }
 });
-dialog.addEventListener("close",()=>{diceTray?.destroy();diceTray=null;dialog.classList.remove("dice-room-dialog");scheduleAI();});
+dialog.addEventListener("close",()=>{if(!diceOverlay)destroyDiceTray();scheduleAI();});
 window.addEventListener("pagehide", save);
 render();
 if(loadError)toast("Saved battle could not load: "+loadError);
