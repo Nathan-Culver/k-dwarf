@@ -43,3 +43,11 @@ test('planned percentile throws preserve held faces and resolve both percentile 
  }
  assert.equal(plan.offsets[2],0);assert(plan.frames.at(-1)[2].q.angleTo(held.shape.top(4))<1e-6);physics.destroy();
 });
+
+
+test('asynchronous dice planning yields to input and preserves the synchronous throw',async()=>{
+ const {planDiceRoll,planDiceRollAsync,createDicePhysics}=await import('../dice-physics.js');const {Quaternion}=await import('three');
+ const run=async(asyncMode)=>{let seed=917;const random=()=>((seed=Math.imul(seed,1664525)+1013904223>>>0)/4294967296);const descriptors=[4,6,8,10,12,20].map((sides,i)=>({record:{sides,face:sides,held:false},shape:diceShape(sides),x:80+i*50,y:150,q:new Quaternion()})),physics=createDicePhysics(descriptors,{width:500,height:300,radius:22});try{return asyncMode?await planDiceRollAsync(physics,descriptors,{random}):planDiceRoll(physics,descriptors,{random});}finally{physics.destroy();}};
+ let inputHandled=false;const pending=run(true);setTimeout(()=>inputHandled=true,0);const actual=await pending,expected=await run(false);assert(inputHandled);assert.deepEqual(actual.offsets,expected.offsets);assert.deepEqual(actual.frames,expected.frames);
+ const controller=new AbortController();controller.abort();await assert.rejects(planDiceRollAsync(null,[],{signal:controller.signal}),{name:'AbortError'});
+});

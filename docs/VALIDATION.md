@@ -2,7 +2,7 @@
 
 ## Automated verification
 
-`npm test`: **168 passing tests**. This includes core actions, Orders, nested save validation, terrain, integrated rule interactions, all supplied player rulings, narrow-gap geometry, dice-table calculations/meshes/convex rigid bodies, automatic action-pool metadata and AI progression.
+`npm test`: **170 passing tests**. This includes core actions, Orders, nested save validation, terrain, integrated rule interactions, all supplied player rulings, narrow-gap geometry, dice-table calculations/meshes/convex rigid bodies, automatic action-pool metadata and AI progression.
 
 `npm run build`: passes. The native game modules, Three.js tabletop and standalone dice-table bundle are packaged for static hosting. Cannon-es is bundled locally, with its MIT license retained.
 
@@ -64,3 +64,20 @@ Recon independence regression: both factions can move out of friendly marker LOS
 LOS display verification: all nine blocking terrain types reject direct shots in both directions when both stands are outside; smoke blocks as well. Direct firing markers use straight legal rays, and convex/concave terrain clipping keeps visible geometry inside rules footprints. Chrome verified blocking woods, named/highlighted blockers, and rejected declarations in 2D and 3D. An independent rectangle-intersection audit verified 1,706 clear witnesses across 2,500 randomized fields without finding a ray through an intervening blocker. This does not establish that the user’s exact reported saved position has been reproduced.
 
 Firing-effects QA: trajectory tests cover fast straight projectiles, arcing indirect projectiles, brief flash timing, drifting/expanding smoke and complete burst termination. Chrome/WebGL verified the scene-space burst becomes active and finishes without JavaScript errors. Reduced-motion settings suppress animated scene effects.
+
+
+## Interaction performance update (2026-10-28)
+
+Selection, targeting and tool-button updates retain the 3D viewport, canvas and GPU scene. Unchanged state no longer clones retained history entries. Shadow maps refresh when stands or terrain change, status meshes are cached, and static terrain matrices are frozen. Camera wheel events coalesce per animation frame. Gunfire frames update the 3D effects without rebuilding the static SVG overlay or labels. Dice trajectory planning yields to input in small batches; playback uses requestAnimationFrame and wall-clock time, while face numbering and accepted results stay fixed.
+
+Touch devices cap rendering at 1.25 device pixels per CSS pixel and use 1024px shadow maps, compared with the previous 1.6 cap and 2048px shadows. HUD backdrop blur is disabled for coarse pointers. These reduce mobile rendering cost without changing game rules or miniature geometry.
+
+Local Chrome, 1280×900, seeded patrol fixture, 4× CPU throttling, before/after samples:
+
+| Synchronous input handler | Previous | Updated |
+| --- | ---: | ---: |
+| Select miniature (8 samples) | 19.5–57.8 ms | 2.6–7.5 ms |
+| Move/LOS/fire tool (4 samples) | 19.5–20.9 ms | 2.4–3.4 ms |
+| Pass initiative (4 samples) | 29.0–42.0 ms | 19.3–35.5 ms |
+
+These are local samples, not an Android hardware benchmark or a frame-rate guarantee. Browser checks verify persistent viewport identity across selection/tool changes, 50 wheel events coalescing into one overlay update, real drag/drop followed by reaction completion, windowed controls, repeated patrol movement, LOS blocker displays, fullscreen HUD/log/Forge/rules, and stable dice results. Responsive Chrome touch emulation checks phone layout and touch interactions; physical-device validation remains necessary.

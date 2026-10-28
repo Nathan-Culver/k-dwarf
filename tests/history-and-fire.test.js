@@ -19,3 +19,7 @@ test('history rejects prototype paths and malformed cursors without polluting ob
 test('v0.2 saves preserve bowls and accepted pending dice while importing new marker/history defaults',()=>{const s=fixture();s.version='0.2.0';delete s.fireEvents;delete s.fireEventSerial;s.options.autoRoll=false;s.units[0].status='pinned';const r=beginDiceAction(s,{type:'rally',id:s.units[0].id});const accepted=recordDice(r.game,[4,4,1,1]);accepted.version='0.2.0';const next=decode(encode(accepted));assert.equal(next.version,'0.3.0');assert.deepEqual(next.commands,accepted.commands);assert.deepEqual(next.pendingDice.rolls,accepted.pendingDice.rolls);assert.deepEqual(next.fireEvents,[]);});
 
 test('a compulsory rally with zero or one passes its owner initiative even with Heroism',()=>{for(const n of[0,1]){const s=fixture(),a=s.units[0];a.status='routed';s.routQueue=[a.id];s.effects=[{name:'Heroism',side:0,target:a.id,retain:true}];fixed(s,n,()=>{E.resolveRout(s,a.id);while(s.pending)E.declineReaction(s);});assert.equal(s.active,1);assert.equal(a.status,'suppressed');}});
+
+test('unchanged UI renders preserve history storage and still detect in-place mutations',()=>{
+ let s=fixture();const h=new GameHistory(s,E.validateSave);s.units[0].x++;assert(h.record(s));const entries=s.history,core=h.core;assert.equal(h.record(s),false);assert.equal(s.history,entries);assert.equal(h.core,core);s.units[0].y++;assert(h.record(s));s=h.undo(s);assert.equal(h.record(s),false);s=h.redo(s);assert.equal(h.record(s),false);s.units[0].facing++;assert(h.record(s));decode(encode(s));
+});

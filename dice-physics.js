@@ -17,10 +17,10 @@ export function createDicePhysics(descriptors,{width,height,radius,onImpact=()=>
 
 // Plan the visual throw before displaying it. Face labels are assigned once,
 // before the first animation frame, and never rewritten when motion stops.
-export function planDiceRoll(physics,descriptors,{random=Math.random,seconds=4,step=1/90}={}){
+function* diceRollSteps(physics,descriptors,{random=Math.random,seconds=4,step=1/90}={}){
  const frames=[],capture=()=>frames.push(descriptors.map(d=>({x:d.x,y:d.y,z:d.z,q:d.q.clone()})));
  physics.toss(random);physics.sync();capture();
- for(let t=0;t<seconds;t+=step){physics.step(step);physics.sync();capture();}
+ for(let t=0;t<seconds;t+=step){physics.step(step);physics.sync();capture();yield;}
  physics.freeze();
  const offsets=descriptors.map(d=>{
   if(d.record.held)return d.faceOffset||0;
@@ -31,4 +31,13 @@ export function planDiceRoll(physics,descriptors,{random=Math.random,seconds=4,s
   return((face-top.value)%sides+sides)%sides;
  });
  return{frames,offsets};
+}
+
+// Share the deterministic throw planner, yielding between physics steps in the UI.
+export function planDiceRoll(physics,descriptors,options){const steps=diceRollSteps(physics,descriptors,options);let result;do{result=steps.next();}while(!result.done);return result.value;}
+export async function planDiceRollAsync(physics,descriptors,{signal,...options}={}){
+ const steps=diceRollSteps(physics,descriptors,options);
+ // Let the browser paint the rolling state before planning the trajectory.
+ await new Promise(resolve=>setTimeout(resolve,0));
+ for(;;){if(signal?.aborted)throw new DOMException('Dice tray closed','AbortError');const start=performance.now();let result;do{result=steps.next();if(result.done)return result.value;}while(performance.now()-start<4);await new Promise(resolve=>setTimeout(resolve,0));}
 }

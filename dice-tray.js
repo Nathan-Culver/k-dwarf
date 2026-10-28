@@ -1,4 +1,4 @@
-import{createDicePhysics,planDiceRoll}from'./dice-physics.js';
+import{createDicePhysics,planDiceRollAsync}from'./dice-physics.js';
 import{Vector3,Quaternion,Euler}from'three';
 import{diceShape}from'./dice-shapes.js';
 import{DICE_TYPES,TRAY_MODES,randomFace,defaultBag,validateDiceBag,rollDiceBag,summarizeDice}from'./dice-tray-core.js';
@@ -89,7 +89,7 @@ function mountScene(canvas,records,settings,{sound,onRoll,onHold,gravity,poses})
    if(b.record.held){ctx.fillStyle='#efcf8e';ctx.font='13px sans-serif';ctx.fillText('▣',b.x+r*.6,b.y-r*.8);}ctx.restore();
   }
  }
- function tick(now){frame=null;if(!alive)return;const dt=Math.min(.025,(now-last)/1000||.016);last=now;if(rolling)elapsed+=dt;canvas.dataset.rollState=rolling?"rolling":"settled";canvas.dataset.elapsed=elapsed.toFixed(2);const gravityTilt=gravity();let awake=rolling||drag||Math.abs(gravityTilt.x)+Math.abs(gravityTilt.y)>.08;
+ function tick(now){frame=null;if(!alive)return;const dt=Math.min(.025,(now-last)/1000||.016);last=now;if(rolling)elapsed+=Math.max(0,(now-rollLast)/1000);rollLast=now;canvas.dataset.rollState=rolling?"rolling":"settled";canvas.dataset.elapsed=elapsed.toFixed(2);const gravityTilt=gravity();let awake=rolling||drag||Math.abs(gravityTilt.x)+Math.abs(gravityTilt.y)>.08;
   if(awake){
    if(rolling){
     const position=Math.min(1,elapsed/duration)*(rollFrames.length-1),lo=Math.floor(position),hi=Math.min(lo+1,rollFrames.length-1),t=position-lo;
@@ -101,14 +101,15 @@ function mountScene(canvas,records,settings,{sound,onRoll,onHold,gravity,poses})
    }
    paint();
   }
-  if(awake)frame=setTimeout(()=>tick(performance.now()),16);
+  if(awake)frame=requestAnimationFrame(tick);
  }
  const duration=matchMedia('(prefers-reduced-motion: reduce)').matches?.22:settings.speed==='fast'?.65:settings.speed==='slow'?2.6:1.65;
- const wake=()=>{if(!frame&&alive){last=performance.now();frame=setTimeout(()=>tick(performance.now()),16);}};
+ let rollLast=0;
+ const wake=()=>{if(!frame&&alive){last=rollLast=performance.now();frame=requestAnimationFrame(tick);}};
  const point=e=>{const box=canvas.getBoundingClientRect();return{x:e.clientX-box.left,y:e.clientY-box.top};};
  canvas.addEventListener('pointerdown',e=>{if(rolling)return;const p=point(e),body=[...bodies].reverse().find(b=>Math.hypot(b.x-p.x,b.y-p.y)<r*1.3);drag={body,start:p,last:p,moved:false};canvas.setPointerCapture(e.pointerId);},{signal});
  canvas.addEventListener('pointermove',e=>{if(!drag)return;const p=point(e);if(Math.hypot(p.x-drag.start.x,p.y-drag.start.y)>6)drag.moved=true;if(drag.body&&drag.moved){const b=drag.body;b.x=p.x;b.y=p.y;b.vx=(p.x-drag.last.x)*20;b.vy=(p.y-drag.last.y)*20;physics.drag(bodies.indexOf(b),b.x,b.y,b.vx,b.vy);paint();}drag.last=p;},{signal});
  const release=e=>{if(!drag)return;const d=drag;drag=null;if(d.body&&!d.moved)onHold(d.body.index);else if(d.moved&&!rolling&&records.every(r=>r.label==='?'))onRoll();else wake();};canvas.addEventListener('pointerup',release,{signal});canvas.addEventListener('pointercancel',()=>{drag=null;},{signal});
  const resize=new ResizeObserver(layout);resize.observe(canvas);layout();
- return{wake,poses(){return Object.fromEntries(bodies.map(b=>[b.record.id+':'+(b.part||''),{x:b.x,y:b.y,z:b.z,q:b.q.clone(),faceOffset:b.faceOffset}]));},hold(index,value){for(const b of bodies)if(b.index===index)b.record.held=value;paint();},animate(){const plan=planDiceRoll(physics,bodies);rollFrames=plan.frames;bodies.forEach((b,i)=>{b.faceOffset=plan.offsets[i];const first=rollFrames[0][i];b.x=first.x;b.y=first.y;b.z=first.z;b.q.copy(first.q);});rolling=true;elapsed=0;return new Promise(resolve=>{resolveRoll=resolve;wake();});},destroy(){alive=false;abort.abort();physics?.destroy();resize.disconnect();if(frame)clearTimeout(frame);resolveRoll?.();}};
+ return{wake,poses(){return Object.fromEntries(bodies.map(b=>[b.record.id+':'+(b.part||''),{x:b.x,y:b.y,z:b.z,q:b.q.clone(),faceOffset:b.faceOffset}]));},hold(index,value){for(const b of bodies)if(b.index===index)b.record.held=value;paint();},async animate(){let plan;try{plan=await planDiceRollAsync(physics,bodies,{signal});}catch(e){if(!alive)return;throw e;}if(!alive)return;rollFrames=plan.frames;bodies.forEach((b,i)=>{b.faceOffset=plan.offsets[i];const first=rollFrames[0][i];b.x=first.x;b.y=first.y;b.z=first.z;b.q.copy(first.q);});rolling=true;elapsed=0;return new Promise(resolve=>{resolveRoll=resolve;wake();});},destroy(){alive=false;abort.abort();physics?.destroy();resize.disconnect();if(frame)cancelAnimationFrame(frame);resolveRoll?.();}};
 }
