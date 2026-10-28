@@ -100,3 +100,9 @@ html:fullscreen,html:-webkit-full-screen{width:100%;height:100%;background:#0712
 .expanded:has(.battlefield-dice) .play-bottom [data-pass],.expanded:has(.battlefield-dice) .play-bottom [data-decline],.battlefield-dice>.tray-physical:has(input:disabled){display:none!important}
 
 .static-fire .fire-tracer,.static-fire .fire-smoke,.static-fire .fire-glow,.static-fire .fire-muzzle,.static-fire .fire-impact{display:none}
+
+/* Touch HUDs avoid repeated backdrop blur over the moving WebGL battlefield. */
+button,a,input,select{touch-action:manipulation}
+@media(pointer:coarse){
+ .play-top,.play-bottom,.play-drawer,.expanded .play-quick-orders,.play-history,.play-recent-log,.unit-popup,.play-target-picker>div,.board-play dialog,.kd-telemetry,dialog::backdrop{backdrop-filter:none;-webkit-backdrop-filter:none}
+}

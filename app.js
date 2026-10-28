@@ -2,9 +2,9 @@ import {filterActionLog,renderActionEntries} from './action-log.js';
 import {movementSelection,toggleFriendlySelection} from './selection.js';
 import{GameHistory}from'./history.js';
 import{activeFireEvents,FIRE_MODE_NAMES}from'./fire-events.js';
-import {mountDiceTray} from './dice-tray.bundle.js?v=0.3.0-battlefield-7';
+import {mountDiceTray} from './dice-tray.bundle.js?v=0.3.0-battlefield-8';
 import {BOARD_LIST,getCommandBoard,getCommandAbility} from './command-board.js';
-import { mountTabletop } from "./tabletop.bundle.js?v=0.3.0-battlefield-7";
+import { mountTabletop } from "./tabletop.bundle.js?v=0.3.0-battlefield-8";
 import * as E from "./engine.js";
 import { VERSION, QUALITIES, TYPES, NATIONS, WEAPONS, ARMOR, PROGRAMS, FEATS, SCENARIOS, RULES_URL } from "./data.js";
 import { armyTemplate, armyTotals, unitValue, encodeArmy, decodeArmy } from "./army.js";
@@ -26,6 +26,7 @@ try {
 game ||= E.newGame();
 let journal=new GameHistory(game,E.validateSave),historyReview=journal.canRedo;
 const startInPlay=new URLSearchParams(location.search).get('play')==='1'||matchMedia('(display-mode: standalone)').matches||matchMedia('(display-mode: fullscreen)').matches;
+let renderedCore=null,renderedView=null,renderedExpanded=null;
 let nativeFullscreen=false,logSide='all',logSearch='';
 let commandSelection = [];
 let selected = [], target = null, mode = "select", tab = startInPlay?"":"orders", view = "tabletop", pan = false, orbit = false, multi = false, expanded = startInPlay, paused = journal.canRedo, camera = null, snapshot = null, toastTimer = null, aiTimer = null, diceRequest = null, context = null, fireMode = "single", fireType = "normal", reactionT = 0.5, mapDraft = null, mapEditor = null, forceSide = 0, forceDrafts = structuredClone(game.options.armies), chosenMap = game.options.battlefield, showShot = true, showZones = false;
@@ -166,6 +167,17 @@ function guidance() {
 function render() {
   if(diceOverlay)destroyDiceTray();
   if(journal?.record(game))Store.save(game);
+  // Selection and tool changes update the existing battlefield rather than
+  // detaching its canvas, rebuilding GPU resources, and relaying out the page.
+  if(camera?.update&&renderedCore===journal.core&&renderedView===view&&renderedExpanded===expanded&&!game.pendingDice&&!diceOverlay){
+    if(expanded)q('.play-hud').outerHTML=playHUD();
+    else{
+      q('.kd-sidebar').innerHTML=`<nav class="kd-desk-tabs">${tabs().map(([id,name])=>button(name,`data-tab="${id}"`,tab===id?'active':'')).join('')}</nav>${panel()}`;
+      q('.map-orders')?.remove();q('.map-viewport').insertAdjacentHTML('afterend',quickOrders());
+    }
+    q('.unit-popup')?.remove();if(context)q('.map-panel').insertAdjacentHTML('beforeend',contextHTML());
+    camera.update({state:mapState(),panOnly:pan,orbitOnly:orbit});scheduleAI();return;
+  }
   snapshot = camera?.destroy() || snapshot;
   camera = null;
   snapshot={...snapshot,expanded};
@@ -184,6 +196,7 @@ function render() {
   } };
   try {
     camera = view === "tabletop" ? mountTabletop(q(".map-viewport"), opts) : mountBattlefield(q(".map-viewport"), opts);
+    renderedCore=journal.core;renderedView=view;renderedExpanded=expanded;
   } catch (e) {
     console.error(e);
     if (view === "tabletop") {

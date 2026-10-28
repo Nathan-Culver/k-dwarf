@@ -34,16 +34,16 @@ export function applyPatches(core,patches){const result=copy(core);for(const op 
  return result;
 }
 export class GameHistory{
- constructor(game,validate=g=>g){this.validate=validate;this.entries=copy(game.history||[]);this.cursor=game.historyCursor??this.entries.length;validateHistory(this.entries,this.cursor);this.core=gameCore(game);this.message='';this.attach(game);}
+ constructor(game,validate=g=>g){this.validate=validate;this.entries=copy(game.history||[]);this.cursor=game.historyCursor??this.entries.length;validateHistory(this.entries,this.cursor);this.core=gameCore(game);this.signature=JSON.stringify(this.core);this.message='';this.attach(game);}
  attach(game){game.history=copy(this.entries);game.historyCursor=this.cursor;}
- record(game,label=null){const next=gameCore(game);if(equal(this.core,next)){this.attach(game);return false;}const patch=diffStates(this.core,next);this.entries=this.entries.slice(0,this.cursor);const last=next.log?.at(-1)?.text;this.entries.push({label:String(label||last||'Game decision').slice(0,160),...patch});this.cursor=this.entries.length;
+ record(game,label=null){const{history,historyCursor,...core}=game,signature=JSON.stringify(core);if(signature===this.signature){if(!Array.isArray(game.history)||game.historyCursor!==this.cursor)this.attach(game);return false;}const next=JSON.parse(signature);const patch=diffStates(this.core,next);this.entries=this.entries.slice(0,this.cursor);const last=next.log?.at(-1)?.text;this.entries.push({label:String(label||last||'Game decision').slice(0,160),...patch});this.cursor=this.entries.length;
   while(this.entries.length>LIMIT||JSON.stringify(this.entries).length>BUDGET){this.entries.shift();this.cursor--;}
-  this.message=this.entries.length?'':'This change exceeded the undo storage budget.';this.core=next;this.attach(game);return true;
+  this.message=this.entries.length?'':'This change exceeded the undo storage budget.';this.core=next;this.signature=signature;this.attach(game);return true;
  }
  get canUndo(){return this.cursor>0;}get canRedo(){return this.cursor<this.entries.length;}
  get undoLabel(){return this.entries[this.cursor-1]?.label||'';}get redoLabel(){return this.entries[this.cursor]?.label||'';}
  restore(game,direction){if(direction==='undo'?!this.canUndo:!this.canRedo)throw Error('Nothing to '+direction+'.');const index=direction==='undo'?this.cursor-1:this.cursor,entry=this.entries[index],nextCore=applyPatches(this.core,entry[direction]),next={...nextCore,history:copy(this.entries),historyCursor:this.cursor+(direction==='undo'?-1:1)};
-  const checked=this.validate(next);this.cursor=next.historyCursor;this.core=gameCore(checked);this.attach(checked);return checked;
+  const checked=this.validate(next);this.cursor=next.historyCursor;this.core=gameCore(checked);this.signature=JSON.stringify(this.core);this.attach(checked);return checked;
  }
  undo(game){return this.restore(game,'undo');}redo(game){return this.restore(game,'redo');}
 }
